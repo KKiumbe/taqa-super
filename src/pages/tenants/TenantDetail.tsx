@@ -13,34 +13,16 @@ import {
   Select,
   SelectChangeEvent,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
-import { api } from '../../services/api';
+import { api, TENANT_APP_URL } from '../../services/api';
 import { TenantDetail as TenantDetailType, TenantStatus } from '../../types';
-
-const currency = new Intl.NumberFormat('en-KE', {
-  style: 'currency',
-  currency: 'KES',
-  maximumFractionDigits: 0,
-});
-
-const datetime = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-});
-
-const riskLabel: Record<string, string> = {
-  NO_ACTIVITY_30_DAYS: 'No activity in 30 days',
-  NO_LOGIN_30_DAYS: 'No login in 30 days',
-  NO_PAYMENT_60_DAYS: 'No payment in 60 days',
-};
+import { currencyFormatter, formatDateTime, formatRiskFlag } from '../../lib/format';
 
 const DetailMetric = ({ label, value }: { label: string; value: string }) => (
   <Box>
@@ -60,18 +42,21 @@ const TenantDetail = () => {
   const [statusDraft, setStatusDraft] = useState<TenantStatus>('ACTIVE');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadTenant = async () => {
-      if (!id) {
-        setError('Tenant ID is missing');
-        return;
-      }
+    if (!id) {
+      setError('Tenant ID is missing');
+      return;
+    }
 
+    const loadTenant = async () => {
       setLoading(true);
       setError(null);
 
@@ -130,6 +115,73 @@ const TenantDetail = () => {
       setError(err?.response?.data?.message ?? 'Failed to update tenant status');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createNote = async () => {
+    if (!tenant || !noteDraft.trim()) {
+      setError('Enter a support note before saving.');
+      return;
+    }
+
+    setNoteSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{
+        note: TenantDetailType['notes'][number];
+      }>('/support/tenant-notes', {
+        tenantId: tenant.id,
+        note: noteDraft.trim(),
+      });
+
+      setTenant((current) =>
+        current
+          ? {
+              ...current,
+              notes: [response.data.note, ...current.notes],
+            }
+          : current
+      );
+      setNoteDraft('');
+      setSuccess('Support note added.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to create support note');
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const impersonate = async () => {
+    if (!tenant) {
+      return;
+    }
+
+    setImpersonating(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{
+        token: string;
+      }>(`/support/impersonate/${tenant.id}`);
+
+      const url = `${TENANT_APP_URL.replace(/\/$/, '')}/impersonate?token=${encodeURIComponent(
+        response.data.token
+      )}`;
+      const openedWindow = window.open(url, '_blank', 'noopener,noreferrer');
+
+      if (!openedWindow) {
+        setError('The tenant app link was generated, but your browser blocked the new tab.');
+        return;
+      }
+
+      setSuccess(`Opened tenant impersonation for ${tenant.name}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to issue impersonation token');
+    } finally {
+      setImpersonating(false);
     }
   };
 
@@ -248,8 +300,8 @@ const TenantDetail = () => {
                 platform audit trail.
               </Typography>
               <Divider />
-              <DetailMetric label="Joined" value={datetime.format(new Date(tenant.createdAt))} />
-              <DetailMetric label="Last Updated" value={datetime.format(new Date(tenant.updatedAt))} />
+              <DetailMetric label="Joined" value={formatDateTime(tenant.createdAt)} />
+              <DetailMetric label="Last Updated" value={formatDateTime(tenant.updatedAt)} />
             </Stack>
           </Paper>
         </Grid>
@@ -262,7 +314,7 @@ const TenantDetail = () => {
               </Typography>
               <Typography variant="h5">{tenant.subscription.name}</Typography>
               <Typography variant="body1" color="text.secondary">
-                {currency.format(tenant.subscription.priceMonthly)} monthly
+                {currencyFormatter.format(tenant.subscription.priceMonthly)} monthly
               </Typography>
               <Divider />
               <DetailMetric label="Legacy Plan Label" value={tenant.subscription.legacyName} />
@@ -291,7 +343,7 @@ const TenantDetail = () => {
                     label="Last Activity"
                     value={
                       tenant.engagement.lastActivityAt
-                        ? datetime.format(new Date(tenant.engagement.lastActivityAt))
+                        ? formatDateTime(tenant.engagement.lastActivityAt)
                         : 'No activity'
                     }
                   />
@@ -301,7 +353,7 @@ const TenantDetail = () => {
                     label="Last Login"
                     value={
                       tenant.engagement.lastLoginAt
-                        ? datetime.format(new Date(tenant.engagement.lastLoginAt))
+                        ? formatDateTime(tenant.engagement.lastLoginAt)
                         : 'No login'
                     }
                   />
@@ -311,7 +363,7 @@ const TenantDetail = () => {
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 {tenant.engagement.riskFlags.length ? (
                   tenant.engagement.riskFlags.map((flag) => (
-                    <Chip key={flag} label={riskLabel[flag] ?? flag} color="warning" variant="outlined" />
+                    <Chip key={flag} label={formatRiskFlag(flag)} color="warning" variant="outlined" />
                   ))
                 ) : (
                   <Chip label="No current risk flags" color="success" variant="outlined" />
@@ -331,7 +383,7 @@ const TenantDetail = () => {
                 label="Latest Tenant Payment"
                 value={
                   tenant.latestPayment
-                    ? `${currency.format(tenant.latestPayment.amount)} on ${datetime.format(new Date(tenant.latestPayment.createdAt))}`
+                    ? `${currencyFormatter.format(tenant.latestPayment.amount)} on ${formatDateTime(tenant.latestPayment.createdAt)}`
                     : 'No recorded tenant payment'
                 }
               />
@@ -339,7 +391,7 @@ const TenantDetail = () => {
                 label="Latest Tenant Invoice"
                 value={
                   tenant.latestInvoice
-                    ? `${tenant.latestInvoice.invoiceNumber} · ${currency.format(tenant.latestInvoice.invoiceAmount)}`
+                    ? `${tenant.latestInvoice.invoiceNumber} · ${currencyFormatter.format(tenant.latestInvoice.invoiceAmount)}`
                     : 'No recorded tenant invoice'
                 }
               />
@@ -382,21 +434,39 @@ const TenantDetail = () => {
                   Support Notes
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Notes creation and impersonation are reserved for later phases, but the detail surface is ready.
+                  Record support context here and launch a short-lived tenant impersonation session when needed.
                 </Typography>
               </Box>
-              <Button disabled variant="outlined">
-                Impersonation arrives in Phase 6
+              <Button variant="outlined" onClick={impersonate} disabled={impersonating}>
+                {impersonating ? 'Opening tenant app...' : 'Impersonate tenant'}
               </Button>
             </Stack>
             <Divider sx={{ my: 2 }} />
+            <Stack spacing={2} sx={{ mb: 2.5 }}>
+              <TextField
+                multiline
+                minRows={3}
+                label="Add support note"
+                placeholder="Capture investigation details, next steps, or customer context."
+                value={noteDraft}
+                onChange={(event) => setNoteDraft(event.target.value)}
+              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <Button variant="contained" onClick={createNote} disabled={noteSaving || !noteDraft.trim()}>
+                  {noteSaving ? 'Saving note...' : 'Save note'}
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  Notes are stored under the platform namespace and visible only to platform admins.
+                </Typography>
+              </Stack>
+            </Stack>
             <Stack spacing={2}>
               {tenant.notes.length ? (
                 tenant.notes.map((note) => (
                   <Paper key={note.id} variant="outlined" sx={{ p: 2 }}>
                     <Typography variant="body1">{note.note}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      {note.admin.name} · {datetime.format(new Date(note.createdAt))}
+                      {note.admin.name} · {formatDateTime(note.createdAt)}
                     </Typography>
                   </Paper>
                 ))

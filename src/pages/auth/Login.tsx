@@ -24,7 +24,7 @@ const Login = () => {
 
   useEffect(() => {
     if (token) {
-      navigate('/tenants', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [token, navigate]);
 
@@ -40,7 +40,7 @@ const Login = () => {
       }>('/auth/login', { email, password });
 
       setSession(response.data.token, response.data.admin);
-      navigate('/tenants', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'Platform login failed');
     } finally {
@@ -136,7 +136,7 @@ const Login = () => {
           />
           <Stack spacing={3} sx={{ position: 'relative', zIndex: 1 }}>
             <Typography variant="overline" sx={{ opacity: 0.7 }}>
-              Approved Phase 1
+              Platform Console
             </Typography>
             <Typography variant="h3" sx={{ color: 'common.white', maxWidth: 420 }}>
               One place to see the whole platform clearly.

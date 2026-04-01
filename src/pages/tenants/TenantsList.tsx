@@ -184,7 +184,7 @@ const TenantsList = () => {
     <Stack spacing={3}>
       <PageHeader
         title="Tenants"
-        subtitle="Cross-tenant list with plan, status, and utilization signals. The current implementation focuses on the approved foundation slice."
+        subtitle="Cross-tenant list with plan, status, and utilization signals. Use this view to move from platform-wide health into a single tenant quickly."
       />
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

@@ -40,8 +40,8 @@ const DashboardLayout = () => {
 
   const navItems = useMemo(
     () => [
-      { label: 'Tenants', icon: <ApartmentRoundedIcon />, to: '/tenants' },
       { label: 'Dashboard', icon: <DashboardRoundedIcon />, to: '/dashboard' },
+      { label: 'Tenants', icon: <ApartmentRoundedIcon />, to: '/tenants' },
       { label: 'Billing', icon: <PaymentsRoundedIcon />, to: '/billing' },
       { label: 'Usage', icon: <InsightsRoundedIcon />, to: '/usage' },
       { label: 'Operations', icon: <BuildRoundedIcon />, to: '/operations' },
@@ -147,7 +147,7 @@ const DashboardLayout = () => {
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Operator View</Typography>
             <Typography variant="body2" color="text.secondary">
-              Separate control plane for platform admins.
+              Cross-tenant metrics, billing posture, and support controls.
             </Typography>
           </Box>
 

@@ -1,4 +1,6 @@
 export type TenantStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
+export type InvoiceStatus = 'UNPAID' | 'PAID' | 'PPAID' | 'CANCELLED';
+export type ConfigStatus = 'CONFIGURED' | 'PARTIAL' | 'MISSING';
 
 export interface PlatformAdminProfile {
   adminId: number;
@@ -99,4 +101,222 @@ export interface TenantDetail {
     status: string;
   } | null;
   notes: TenantNote[];
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface BillingTrendPoint {
+  key: string;
+  label: string;
+  invoiceAmount: number;
+  paymentAmount: number;
+}
+
+export interface LoginTrendPoint {
+  key: string;
+  label: string;
+  loginCount: number;
+  activeUsers: number;
+  activeTenants: number;
+}
+
+export interface DashboardOverview {
+  totalTenants: number;
+  activeTenants: number;
+  disabledTenants: number;
+  expiredTenants: number;
+  mrr: number;
+  unpaidInvoiceCount: number;
+  unpaidInvoiceAmount: number;
+  activeUsersLast30Days: number;
+}
+
+export interface DashboardCharts {
+  tenantGrowth: Array<{
+    key: string;
+    label: string;
+    newTenants: number;
+    totalTenants: number;
+  }>;
+  revenueByMonth: BillingTrendPoint[];
+  paymentsVsInvoices: BillingTrendPoint[];
+  loginActivity: LoginTrendPoint[];
+}
+
+export interface DashboardPayload {
+  overview: DashboardOverview;
+  charts: DashboardCharts;
+}
+
+export interface RevenueSummary {
+  mrr: number;
+  collectionsThisMonth: number;
+  totalInvoiceAmount: number;
+  totalAmountPaidOnInvoices: number;
+  totalPaymentsReceived: number;
+  totalInvoices: number;
+  totalPayments: number;
+  unpaidInvoiceCount: number;
+  unpaidInvoiceAmount: number;
+  activeTenants: number;
+}
+
+export interface RevenueSummaryPayload {
+  summary: RevenueSummary;
+  revenueByMonth: BillingTrendPoint[];
+  paymentsVsInvoices: BillingTrendPoint[];
+}
+
+export interface PlatformInvoice {
+  id: string;
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  invoiceNumber: string;
+  invoicePeriod: string;
+  invoiceAmount: number;
+  amountPaid: number;
+  balance: number;
+  status: InvoiceStatus;
+  createdAt: string;
+  updatedAt: string;
+  plan: PlanSummary;
+  paymentCount: number;
+  latestPaymentAt: string | null;
+}
+
+export interface PlatformPayment {
+  id: string;
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  tenantInvoiceId: string;
+  invoiceNumber: string | null;
+  invoiceStatus: InvoiceStatus | null;
+  amount: number;
+  modeOfPayment: string;
+  transactionId: string | null;
+  createdAt: string;
+}
+
+export interface UsageTenant {
+  tenantId: number;
+  name: string;
+  status: TenantStatus;
+  plan: PlanSummary;
+  userCount: number;
+  customerCount: number;
+  allowedUsers: number;
+  createdAt: string;
+  lastActivityAt: string | null;
+  lastLoginAt: string | null;
+  lastPaymentAt: string | null;
+  actionsLast30Days: number;
+  activeUsersLast30Days: number;
+  engagementScore: number;
+  riskFlags: string[];
+}
+
+export interface LoginActivityPayload {
+  trend: LoginTrendPoint[];
+  totals: {
+    loginCount: number;
+    activeUsers: number;
+  };
+  topTenants: Array<{
+    tenantId: number;
+    name: string;
+    status: string;
+    loginCount: number;
+  }>;
+}
+
+export interface SmsConfigItem {
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  configStatus: ConfigStatus;
+  config: {
+    id: number | string;
+    partnerId?: string | null;
+    shortCode?: string | null;
+    customerSupportPhoneNumber?: string | null;
+    childId?: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+export interface MpesaConfigItem {
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  configStatus: ConfigStatus;
+  config: {
+    id: number | string;
+    shortCode?: string | null;
+    name?: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+export interface SmsUsageItem {
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  purchasedUnits: number;
+  purchaseAmount: number;
+  consumedMessages: number;
+  failedMessages: number;
+  lastPurchaseAt: string | null;
+  lastMessageAt: string | null;
+}
+
+export interface MpesaTransactionItem {
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  totalTransactions: number;
+  processedTransactions: number;
+  unprocessedTransactions: number;
+  totalAmount: number;
+  lastTransactionAt: string | null;
+  successRate: number;
+}
+
+export interface AuditLogRow {
+  id: string;
+  action: string;
+  resource: string;
+  description: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+  tenant: {
+    id: number;
+    name: string;
+    status: TenantStatus;
+  };
+  user: {
+    id: number;
+    name: string;
+    email: string;
+  };
+}
+
+export interface PlatformActionLogRow {
+  id: string;
+  action: string;
+  resource: string;
+  resourceId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+  admin: {
+    id: number;
+    name: string;
+    email: string;
+  };
 }
