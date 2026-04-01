@@ -351,3 +351,23 @@ export interface PlatformActionLogRow {
     email: string;
   };
 }
+
+export interface PlatformBulkSkippedTenant {
+  tenantId: number;
+  tenantName: string;
+  reason: string;
+  outstandingAmount?: number;
+  openInvoiceCount?: number;
+  primaryInvoiceNumber?: string | null;
+}
+
+export interface PlatformBulkSmsSummary {
+  tenantCount: number;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  targetedTenantIds: number[];
+  skippedTenants: PlatformBulkSkippedTenant[];
+  paybill?: string;
+}

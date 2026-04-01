@@ -16,7 +16,13 @@ import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
 import { api } from '../../services/api';
-import { AuditLogRow, PaginationMeta, PlatformActionLogRow, TenantSummary } from '../../types';
+import {
+  AuditLogRow,
+  PaginationMeta,
+  PlatformActionLogRow,
+  PlatformBulkSmsSummary,
+  TenantSummary,
+} from '../../types';
 import { formatDateTime } from '../../lib/format';
 
 const stringifyDetails = (details: Record<string, unknown> | null) => {
@@ -33,6 +39,22 @@ type PlatformSmsSenderProfile = {
   partnerId: string;
   shortCode: string;
   customerSupportPhoneNumber: string;
+};
+
+type BulkActionResult = {
+  title: string;
+  summary: PlatformBulkSmsSummary;
+};
+
+const formatCurrencyAmount = (value?: number) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return null;
+  }
+
+  return `KES ${value.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 const Support = () => {
@@ -54,12 +76,16 @@ const Support = () => {
   const [platformSmsSender, setPlatformSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
   const [smsRecipientsDraft, setSmsRecipientsDraft] = useState('');
   const [smsMessageDraft, setSmsMessageDraft] = useState('');
+  const [bulkSmsMessageDraft, setBulkSmsMessageDraft] = useState('');
   const [sendingSms, setSendingSms] = useState(false);
+  const [sendingBulkSms, setSendingBulkSms] = useState(false);
+  const [sendingBillReminders, setSendingBillReminders] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [submittingNote, setSubmittingNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [bulkActionResult, setBulkActionResult] = useState<BulkActionResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -234,6 +260,62 @@ const Support = () => {
     }
   };
 
+  const sendBulkTenantAdminSms = async () => {
+    if (!bulkSmsMessageDraft.trim()) {
+      setError('Enter the bulk SMS message before sending.');
+      return;
+    }
+
+    setSendingBulkSms(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string; summary: PlatformBulkSmsSummary }>(
+        '/support/send-bulk-sms',
+        {
+          message: bulkSmsMessageDraft.trim(),
+        }
+      );
+
+      setBulkSmsMessageDraft('');
+      setBulkActionResult({
+        title: 'Bulk Tenant Admin SMS',
+        summary: response.data.summary,
+      });
+      setSuccess(response.data.message);
+      setRefreshKey((value) => value + 1);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send bulk tenant-admin SMS');
+    } finally {
+      setSendingBulkSms(false);
+    }
+  };
+
+  const sendBillRemindersToAllTenantAdmins = async () => {
+    setSendingBillReminders(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string; summary: PlatformBulkSmsSummary }>(
+        '/support/send-bill-reminders',
+        {}
+      );
+
+      setBulkActionResult({
+        title: 'Tenant Billing Reminders',
+        summary: response.data.summary,
+      });
+      setSuccess(response.data.message);
+      setRefreshKey((value) => value + 1);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send tenant billing reminders');
+    } finally {
+      setSendingBillReminders(false);
+    }
+  };
+
   const auditColumns = useMemo<GridColDef<AuditLogRow>[]>(
     () => [
       {
@@ -342,7 +424,7 @@ const Support = () => {
     <Stack spacing={3}>
       <PageHeader
         title="Support"
-        subtitle="Cross-tenant audit visibility plus support notes recorded by platform admins."
+        subtitle="Cross-tenant communication, billing reminders, and audit visibility for platform admins."
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -440,6 +522,80 @@ const Support = () => {
               {sendingSms ? 'Sending SMS...' : `Send SMS${smsRecipientCount ? ` (${smsRecipientCount})` : ''}`}
             </Button>
           </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="overline" color="primary">
+              Bulk Tenant Admin Communication
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Broadcast to all tenant admins from the same sender profile, or send bill reminders to
+              every tenant with open platform invoices.
+            </Typography>
+          </Box>
+          <TextField
+            fullWidth
+            multiline
+            minRows={4}
+            label="Bulk SMS Message"
+            placeholder="Write the cross-tenant update, announcement, or operational notice."
+            value={bulkSmsMessageDraft}
+            onChange={(event) => setBulkSmsMessageDraft(event.target.value)}
+            helperText={`Targets active tenant-admin users across ${tenants.length} tenant(s). If a tenant has no admin phone, the tenant contact on file is used as a fallback.`}
+          />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <Button variant="contained" onClick={sendBulkTenantAdminSms} disabled={sendingBulkSms}>
+              {sendingBulkSms ? 'Sending bulk SMS...' : 'Send SMS To All Tenant Admins'}
+            </Button>
+            <Button
+              variant="outlined"
+              color="warning"
+              onClick={sendBillRemindersToAllTenantAdmins}
+              disabled={sendingBillReminders}
+            >
+              {sendingBillReminders ? 'Sending bill reminders...' : 'Send Bills To All Tenant Admins'}
+            </Button>
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            Billing reminders use paybill {bulkActionResult?.summary.paybill ?? '4091081'} and the
+            oldest open platform invoice number as the payment account reference.
+          </Typography>
+          {bulkActionResult ? (
+            <Alert severity="info">
+              <Stack spacing={1}>
+                <Typography variant="subtitle2">{bulkActionResult.title}</Typography>
+                <Typography variant="body2">
+                  Targeted {bulkActionResult.summary.tenantCount} tenant(s), {bulkActionResult.summary.recipientCount}{' '}
+                  recipient(s), {bulkActionResult.summary.sentCount} sent, {bulkActionResult.summary.failedCount}{' '}
+                  failed, {bulkActionResult.summary.skippedCount} skipped.
+                </Typography>
+                {bulkActionResult.summary.skippedTenants.length ? (
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>
+                      Skipped tenants
+                    </Typography>
+                    <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                      {bulkActionResult.summary.skippedTenants.slice(0, 6).map((tenant) => (
+                        <Typography key={`${bulkActionResult.title}-${tenant.tenantId}`} variant="body2">
+                          {tenant.tenantName}: {tenant.reason}
+                          {tenant.outstandingAmount ? ` (${formatCurrencyAmount(tenant.outstandingAmount)})` : ''}
+                          {tenant.primaryInvoiceNumber ? ` ref ${tenant.primaryInvoiceNumber}` : ''}
+                        </Typography>
+                      ))}
+                      {bulkActionResult.summary.skippedTenants.length > 6 ? (
+                        <Typography variant="body2">
+                          {bulkActionResult.summary.skippedTenants.length - 6} more tenant(s) skipped.
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Box>
+                ) : null}
+              </Stack>
+            </Alert>
+          ) : null}
         </Stack>
       </Paper>
 
