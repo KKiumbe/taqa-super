@@ -561,7 +561,7 @@ const Support = () => {
           </Stack>
           <Typography variant="body2" color="text.secondary">
             Billing reminders use paybill {bulkActionResult?.summary.paybill ?? '4091081'} and the
-            oldest open platform invoice number as the payment account reference.
+            tenant admin phone number as the payment account reference.
           </Typography>
           {bulkActionResult ? (
             <Alert severity="info">
