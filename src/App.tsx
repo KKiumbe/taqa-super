@@ -38,6 +38,7 @@ const App = () => {
           <Route path="/billing" element={<Billing />} />
           <Route path="/usage" element={<Usage />} />
           <Route path="/operations" element={<Operations />} />
+          <Route path="/communication" element={<Support />} />
           <Route path="/support" element={<Support />} />
         </Route>
         <Route

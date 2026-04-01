@@ -22,6 +22,7 @@ import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded';
 import SupportAgentRoundedIcon from '@mui/icons-material/SupportAgentRounded';
+import SmsRoundedIcon from '@mui/icons-material/SmsRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
@@ -45,6 +46,7 @@ const DashboardLayout = () => {
       { label: 'Billing', icon: <PaymentsRoundedIcon />, to: '/billing' },
       { label: 'Usage', icon: <InsightsRoundedIcon />, to: '/usage' },
       { label: 'Operations', icon: <BuildRoundedIcon />, to: '/operations' },
+      { label: 'Communication', icon: <SmsRoundedIcon />, to: '/communication' },
       { label: 'Support', icon: <SupportAgentRoundedIcon />, to: '/support' },
     ],
     []

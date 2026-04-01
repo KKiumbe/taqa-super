@@ -423,8 +423,8 @@ const Support = () => {
   return (
     <Stack spacing={3}>
       <PageHeader
-        title="Support"
-        subtitle="Cross-tenant communication, billing reminders, and audit visibility for platform admins."
+        title="Communication"
+        subtitle="Bulk tenant-admin SMS, billing reminders, tenant outreach, and platform support activity."
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
