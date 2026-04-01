@@ -57,6 +57,14 @@ const toAmountInput = (value: number): string => {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 };
 
+type PlatformSmsSenderProfile = {
+  tenantId: number;
+  tenantName: string;
+  partnerId: string;
+  shortCode: string;
+  customerSupportPhoneNumber: string;
+};
+
 const DetailMetric = ({ label, value }: { label: string; value: string }) => (
   <Box>
     <Typography variant="overline" color="text.secondary">
@@ -81,11 +89,15 @@ const TenantDetail = () => {
   const [paymentReferenceDraft, setPaymentReferenceDraft] = useState('');
   const [paymentInvoiceIdDraft, setPaymentInvoiceIdDraft] = useState('');
   const [paidAtDraft, setPaidAtDraft] = useState(getCurrentDateTimeInput());
+  const [platformSmsSender, setPlatformSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
+  const [smsRecipientsDraft, setSmsRecipientsDraft] = useState('');
+  const [smsMessageDraft, setSmsMessageDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
@@ -106,7 +118,7 @@ const TenantDetail = () => {
       setError(null);
 
       try {
-        const [tenantResponse, invoicesResponse] = await Promise.all([
+        const [tenantResponse, invoicesResponse, senderResponse] = await Promise.all([
           api.get<{ tenant: TenantDetailType }>(`/tenants/${id}`),
           api.get<{ invoices: PlatformInvoice[] }>(`/billing/invoices`, {
             params: {
@@ -114,6 +126,7 @@ const TenantDetail = () => {
               limit: 25,
             },
           }),
+          api.get<{ sender: PlatformSmsSenderProfile }>('/support/sms-sender'),
         ]);
 
         if (cancelled) {
@@ -123,8 +136,15 @@ const TenantDetail = () => {
         setTenant(tenantResponse.data.tenant);
         setStatusDraft(tenantResponse.data.tenant.status);
         setBillingInvoices(invoicesResponse.data.invoices);
+        setPlatformSmsSender(senderResponse.data.sender);
         setInvoiceAmountDraft((current) =>
           current || toAmountInput(tenantResponse.data.tenant.subscription.priceMonthly)
+        );
+        setSmsRecipientsDraft((current) =>
+          current ||
+          tenantResponse.data.tenant.phoneNumber ||
+          tenantResponse.data.tenant.alternativePhoneNumber ||
+          ''
         );
       } catch (err: any) {
         if (!cancelled) {
@@ -159,6 +179,12 @@ const TenantDetail = () => {
     setTenant(tenantResponse.data.tenant);
     setStatusDraft(tenantResponse.data.tenant.status);
     setBillingInvoices(invoicesResponse.data.invoices);
+    setSmsRecipientsDraft((current) =>
+      current ||
+      tenantResponse.data.tenant.phoneNumber ||
+      tenantResponse.data.tenant.alternativePhoneNumber ||
+      ''
+    );
   };
 
   const statusDirty = tenant ? tenant.status !== statusDraft : false;
@@ -188,6 +214,15 @@ const TenantDetail = () => {
   const selectedInvoice = useMemo(
     () => openInvoices.find((invoice) => invoice.id === paymentInvoiceIdDraft) ?? null,
     [openInvoices, paymentInvoiceIdDraft]
+  );
+
+  const smsRecipientCount = useMemo(
+    () =>
+      smsRecipientsDraft
+        .split(/[\n,;]+/)
+        .map((value) => value.trim())
+        .filter(Boolean).length,
+    [smsRecipientsDraft]
   );
 
   const saveStatus = async () => {
@@ -333,6 +368,41 @@ const TenantDetail = () => {
       setError(err?.response?.data?.message ?? 'Failed to create support note');
     } finally {
       setNoteSaving(false);
+    }
+  };
+
+  const sendPlatformSms = async () => {
+    if (!tenant) {
+      return;
+    }
+
+    if (!smsRecipientsDraft.trim()) {
+      setError('Enter at least one recipient phone number.');
+      return;
+    }
+
+    if (!smsMessageDraft.trim()) {
+      setError('Enter the SMS message before sending.');
+      return;
+    }
+
+    setSendingSms(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string }>('/support/send-sms', {
+        tenantId: tenant.id,
+        recipients: smsRecipientsDraft,
+        message: smsMessageDraft.trim(),
+      });
+
+      setSmsMessageDraft('');
+      setSuccess(`${response.data.message} for ${tenant.name}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send platform SMS');
+    } finally {
+      setSendingSms(false);
     }
   };
 
@@ -803,6 +873,70 @@ const TenantDetail = () => {
               <Button variant="contained" onClick={recordManualPayment} disabled={recordingPayment}>
                 {recordingPayment ? 'Recording payment...' : 'Record payment'}
               </Button>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="overline" color="primary">
+                  Tenant Communication
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
+                  {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
+                  {platformSmsSender?.partnerId ?? '4680'}.
+                </Typography>
+              </Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={5}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    label="Recipients"
+                    placeholder="0700000000, 0711111111"
+                    value={smsRecipientsDraft}
+                    onChange={(event) => setSmsRecipientsDraft(event.target.value)}
+                    helperText={
+                      tenant.alternativePhoneNumber
+                        ? `Primary contact: ${tenant.phoneNumber || 'Not set'} • Alternative: ${tenant.alternativePhoneNumber}`
+                        : `Primary contact: ${tenant.phoneNumber || 'Not set'}`
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} md={7}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={4}
+                    label="SMS Message"
+                    placeholder="Write the tenant update, payment follow-up, or support message."
+                    value={smsMessageDraft}
+                    onChange={(event) => setSmsMessageDraft(event.target.value)}
+                  />
+                </Grid>
+              </Grid>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <Button
+                  variant="outlined"
+                  disabled={!tenant.phoneNumber && !tenant.alternativePhoneNumber}
+                  onClick={() =>
+                    setSmsRecipientsDraft(tenant.phoneNumber || tenant.alternativePhoneNumber || '')
+                  }
+                >
+                  Use tenant contact
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={sendPlatformSms}
+                  disabled={sendingSms}
+                >
+                  {sendingSms ? 'Sending SMS...' : `Send SMS${smsRecipientCount ? ` (${smsRecipientCount})` : ''}`}
+                </Button>
+              </Stack>
             </Stack>
           </Paper>
         </Grid>
