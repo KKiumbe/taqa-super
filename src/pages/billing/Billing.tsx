@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Grid,
   MenuItem,
   Paper,
@@ -19,6 +20,7 @@ import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
 import { api } from '../../services/api';
 import {
+  BillingRecordSource,
   InvoiceStatus,
   PaginationMeta,
   PlatformInvoice,
@@ -28,6 +30,11 @@ import {
 import { currencyFormatter, formatDate, formatDateTime } from '../../lib/format';
 
 const invoiceStatuses: Array<'ALL' | InvoiceStatus> = ['ALL', 'UNPAID', 'PPAID', 'PAID', 'CANCELLED'];
+const billingSources: Array<'ALL' | BillingRecordSource> = ['ALL', 'PLATFORM', 'LEGACY_CUSTOMER'];
+const sourceLabel: Record<BillingRecordSource, string> = {
+  PLATFORM: 'Platform',
+  LEGACY_CUSTOMER: 'Migrated',
+};
 
 const Billing = () => {
   const navigate = useNavigate();
@@ -46,6 +53,8 @@ const Billing = () => {
     pageSize: 10,
   });
   const [invoiceStatus, setInvoiceStatus] = useState<'ALL' | InvoiceStatus>('ALL');
+  const [billingSource, setBillingSource] = useState<'ALL' | BillingRecordSource>('ALL');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,12 +73,16 @@ const Billing = () => {
               page: invoicePaginationModel.page + 1,
               limit: invoicePaginationModel.pageSize,
               status: invoiceStatus === 'ALL' ? undefined : invoiceStatus,
+              source: billingSource === 'ALL' ? undefined : billingSource,
+              search: search || undefined,
             },
           }),
           api.get<{ payments: PlatformPayment[]; pagination: PaginationMeta }>('/billing/payments', {
             params: {
               page: paymentPaginationModel.page + 1,
               limit: paymentPaginationModel.pageSize,
+              source: billingSource === 'ALL' ? undefined : billingSource,
+              search: search || undefined,
             },
           }),
         ]);
@@ -105,6 +118,8 @@ const Billing = () => {
     paymentPaginationModel.page,
     paymentPaginationModel.pageSize,
     invoiceStatus,
+    billingSource,
+    search,
   ]);
 
   const invoiceColumns = useMemo<GridColDef<PlatformInvoice>[]>(
@@ -122,9 +137,28 @@ const Billing = () => {
         ),
       },
       {
+        field: 'source',
+        headerName: 'Source',
+        minWidth: 130,
+        renderCell: (params) => (
+          <Chip
+            size="small"
+            color={params.row.source === 'LEGACY_CUSTOMER' ? 'secondary' : 'primary'}
+            variant={params.row.source === 'LEGACY_CUSTOMER' ? 'filled' : 'outlined'}
+            label={sourceLabel[params.row.source]}
+          />
+        ),
+      },
+      {
         field: 'invoiceNumber',
         headerName: 'Invoice',
         minWidth: 150,
+      },
+      {
+        field: 'legacyCustomerName',
+        headerName: 'Legacy Customer',
+        minWidth: 190,
+        valueFormatter: (value) => (value as string | null) || 'Direct platform billing',
       },
       {
         field: 'invoicePeriod',
@@ -189,9 +223,24 @@ const Billing = () => {
           <Box sx={{ py: 1 }}>
             <Typography fontWeight={700}>{params.row.tenantName}</Typography>
             <Typography variant="body2" color="text.secondary">
-              {params.row.invoiceNumber ?? 'No linked invoice'}
+              {params.row.legacyCustomerName
+                ? `Legacy: ${params.row.legacyCustomerName}`
+                : params.row.invoiceNumber ?? 'No linked invoice'}
             </Typography>
           </Box>
+        ),
+      },
+      {
+        field: 'source',
+        headerName: 'Source',
+        minWidth: 130,
+        renderCell: (params) => (
+          <Chip
+            size="small"
+            color={params.row.source === 'LEGACY_CUSTOMER' ? 'secondary' : 'primary'}
+            variant={params.row.source === 'LEGACY_CUSTOMER' ? 'filled' : 'outlined'}
+            label={sourceLabel[params.row.source]}
+          />
         ),
       },
       {
@@ -200,6 +249,28 @@ const Billing = () => {
         minWidth: 160,
         renderCell: (params) =>
           params.row.invoiceStatus ? <StatusChip status={params.row.invoiceStatus} /> : <Typography>-</Typography>,
+      },
+      {
+        field: 'linkedInvoiceNumbers',
+        headerName: 'Linked Invoices',
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params) => {
+          const labels = params.row.linkedInvoiceNumbers ?? [];
+          if (!labels.length) {
+            return <Typography variant="body2">No invoice link</Typography>;
+          }
+
+          const preview = labels.slice(0, 2).join(', ');
+          const suffix = labels.length > 2 ? ` +${labels.length - 2} more` : '';
+
+          return (
+            <Typography variant="body2">
+              {preview}
+              {suffix}
+            </Typography>
+          );
+        },
       },
       {
         field: 'amount',
@@ -246,22 +317,52 @@ const Billing = () => {
         title="Billing"
         subtitle="Revenue summary, tenant invoices, and payment history across the platform."
         action={
-          <TextField
-            select
-            label="Invoice status"
-            value={invoiceStatus}
-            onChange={(event) => {
-              setInvoiceStatus(event.target.value as 'ALL' | InvoiceStatus);
-              setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
-            }}
-            sx={{ minWidth: 180 }}
-          >
-            {invoiceStatuses.map((status) => (
-              <MenuItem key={status} value={status}>
-                {status === 'ALL' ? 'All invoices' : status}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField
+              label="Search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
+                setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              placeholder="Tenant, invoice, transaction"
+              sx={{ minWidth: 220 }}
+            />
+            <TextField
+              select
+              label="Source"
+              value={billingSource}
+              onChange={(event) => {
+                setBillingSource(event.target.value as 'ALL' | BillingRecordSource);
+                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
+                setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              sx={{ minWidth: 160 }}
+            >
+              {billingSources.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status === 'ALL' ? 'All sources' : sourceLabel[status]}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Invoice status"
+              value={invoiceStatus}
+              onChange={(event) => {
+                setInvoiceStatus(event.target.value as 'ALL' | InvoiceStatus);
+                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              sx={{ minWidth: 180 }}
+            >
+              {invoiceStatuses.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status === 'ALL' ? 'All invoices' : status}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
         }
       />
 

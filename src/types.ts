@@ -1,6 +1,7 @@
 export type TenantStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 export type InvoiceStatus = 'UNPAID' | 'PAID' | 'PPAID' | 'CANCELLED';
 export type ConfigStatus = 'CONFIGURED' | 'PARTIAL' | 'MISSING';
+export type BillingRecordSource = 'PLATFORM' | 'LEGACY_CUSTOMER';
 
 export interface PlatformAdminProfile {
   adminId: number;
@@ -183,6 +184,10 @@ export interface PlatformInvoice {
   amountPaid: number;
   balance: number;
   status: InvoiceStatus;
+  source: BillingRecordSource;
+  legacyCustomerId: string | null;
+  legacyCustomerName: string | null;
+  legacyInvoiceId: string | null;
   createdAt: string;
   updatedAt: string;
   plan: PlanSummary;
@@ -201,6 +206,13 @@ export interface PlatformPayment {
   amount: number;
   modeOfPayment: string;
   transactionId: string | null;
+  source: BillingRecordSource;
+  legacyCustomerId: string | null;
+  legacyCustomerName: string | null;
+  legacyPaymentId: string | null;
+  legacyReceiptId: string | null;
+  linkedInvoiceNumbers: string[];
+  linkedInvoiceCount: number;
   createdAt: string;
 }
 
