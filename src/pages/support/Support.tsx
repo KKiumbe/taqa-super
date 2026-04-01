@@ -27,6 +27,14 @@ const stringifyDetails = (details: Record<string, unknown> | null) => {
   return JSON.stringify(details);
 };
 
+type PlatformSmsSenderProfile = {
+  tenantId: number;
+  tenantName: string;
+  partnerId: string;
+  shortCode: string;
+  customerSupportPhoneNumber: string;
+};
+
 const Support = () => {
   const navigate = useNavigate();
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
@@ -43,6 +51,10 @@ const Support = () => {
     pageSize: 10,
   });
   const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [platformSmsSender, setPlatformSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
+  const [smsRecipientsDraft, setSmsRecipientsDraft] = useState('');
+  const [smsMessageDraft, setSmsMessageDraft] = useState('');
+  const [sendingSms, setSendingSms] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [submittingNote, setSubmittingNote] = useState(false);
@@ -53,27 +65,31 @@ const Support = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadTenants = async () => {
+    const loadSupportSetup = async () => {
       try {
-        const response = await api.get<{ tenants: TenantSummary[] }>('/tenants', {
-          params: {
-            page: 1,
-            limit: 100,
-          },
-        });
+        const [tenantResponse, senderResponse] = await Promise.all([
+          api.get<{ tenants: TenantSummary[] }>('/tenants', {
+            params: {
+              page: 1,
+              limit: 100,
+            },
+          }),
+          api.get<{ sender: PlatformSmsSenderProfile }>('/support/sms-sender'),
+        ]);
 
         if (cancelled) {
           return;
         }
 
-        setTenants(response.data.tenants);
-        setSelectedTenantId((current) => current || String(response.data.tenants[0]?.id ?? ''));
+        setTenants(tenantResponse.data.tenants);
+        setPlatformSmsSender(senderResponse.data.sender);
+        setSelectedTenantId((current) => current || String(tenantResponse.data.tenants[0]?.id ?? ''));
       } catch (err) {
-        console.error('Failed to load tenants for support note composer:', err);
+        console.error('Failed to load support setup:', err);
       }
     };
 
-    loadTenants();
+    loadSupportSetup();
 
     return () => {
       cancelled = true;
@@ -140,6 +156,21 @@ const Support = () => {
     [selectedTenantId, tenants]
   );
 
+  const smsRecipientCount = useMemo(
+    () =>
+      smsRecipientsDraft
+        .split(/[\n,;]+/)
+        .map((value) => value.trim())
+        .filter(Boolean).length,
+    [smsRecipientsDraft]
+  );
+
+  const handleTenantSelection = (nextTenantId: string) => {
+    setSelectedTenantId(nextTenantId);
+    const nextTenant = tenants.find((tenant) => String(tenant.id) === nextTenantId) ?? null;
+    setSmsRecipientsDraft((current) => (current.trim() ? current : nextTenant?.phoneNumber ?? ''));
+  };
+
   const submitNote = async () => {
     if (!selectedTenantId || !noteDraft.trim()) {
       setError('Select a tenant and enter a note.');
@@ -163,6 +194,43 @@ const Support = () => {
       setError(err?.response?.data?.message ?? 'Failed to create tenant note');
     } finally {
       setSubmittingNote(false);
+    }
+  };
+
+  const sendPlatformSms = async () => {
+    if (!selectedTenantId) {
+      setError('Select a tenant before sending an SMS.');
+      return;
+    }
+
+    if (!smsRecipientsDraft.trim()) {
+      setError('Enter at least one recipient phone number.');
+      return;
+    }
+
+    if (!smsMessageDraft.trim()) {
+      setError('Enter the SMS message before sending.');
+      return;
+    }
+
+    setSendingSms(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string }>('/support/send-sms', {
+        tenantId: Number(selectedTenantId),
+        recipients: smsRecipientsDraft,
+        message: smsMessageDraft.trim(),
+      });
+
+      setSmsMessageDraft('');
+      setSuccess(`${response.data.message} for ${selectedTenant?.name ?? 'the selected tenant'}.`);
+      setRefreshKey((value) => value + 1);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send platform SMS');
+    } finally {
+      setSendingSms(false);
     }
   };
 
@@ -304,6 +372,81 @@ const Support = () => {
         <Stack spacing={2}>
           <Box>
             <Typography variant="overline" color="primary">
+              Tenant Communication
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
+              {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
+              {platformSmsSender?.partnerId ?? '4680'}.
+            </Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <TextField
+                select
+                fullWidth
+                label="Tenant"
+                value={selectedTenantId}
+                onChange={(event) => handleTenantSelection(event.target.value)}
+              >
+                {tenants.map((tenant) => (
+                  <MenuItem key={tenant.id} value={String(tenant.id)}>
+                    {tenant.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Recipients"
+                placeholder="0700000000, 0711111111"
+                value={smsRecipientsDraft}
+                onChange={(event) => setSmsRecipientsDraft(event.target.value)}
+                helperText={
+                  selectedTenant?.phoneNumber
+                    ? `Selected tenant primary contact: ${selectedTenant.phoneNumber}. Use commas or new lines for multiple recipients.`
+                    : 'Use commas or new lines to separate multiple recipients.'
+                }
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={4}
+                label="SMS Message"
+                placeholder="Write the tenant update, reminder, or follow-up."
+                value={smsMessageDraft}
+                onChange={(event) => setSmsMessageDraft(event.target.value)}
+              />
+            </Grid>
+          </Grid>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <Button
+              variant="outlined"
+              disabled={!selectedTenant?.phoneNumber}
+              onClick={() => setSmsRecipientsDraft(selectedTenant?.phoneNumber ?? '')}
+            >
+              Use tenant contact
+            </Button>
+            <Button
+              variant="contained"
+              onClick={sendPlatformSms}
+              disabled={sendingSms || !selectedTenantId}
+            >
+              {sendingSms ? 'Sending SMS...' : `Send SMS${smsRecipientCount ? ` (${smsRecipientCount})` : ''}`}
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="overline" color="primary">
               Create Tenant Note
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -317,7 +460,7 @@ const Support = () => {
                 fullWidth
                 label="Tenant"
                 value={selectedTenantId}
-                onChange={(event) => setSelectedTenantId(event.target.value)}
+                onChange={(event) => handleTenantSelection(event.target.value)}
               >
                 {tenants.map((tenant) => (
                   <MenuItem key={tenant.id} value={String(tenant.id)}>
