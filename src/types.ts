@@ -2,6 +2,7 @@ export type TenantStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 export type InvoiceStatus = 'UNPAID' | 'PAID' | 'PPAID' | 'CANCELLED';
 export type ConfigStatus = 'CONFIGURED' | 'PARTIAL' | 'MISSING';
 export type BillingRecordSource = 'PLATFORM' | 'LEGACY_CUSTOMER';
+export type ModeOfPayment = 'CASH' | 'MPESA' | 'BANK_TRANSFER' | 'CREDIT_CARD' | 'DEBIT_CARD';
 
 export interface PlatformAdminProfile {
   adminId: number;
@@ -204,7 +205,7 @@ export interface PlatformPayment {
   invoiceNumber: string | null;
   invoiceStatus: InvoiceStatus | null;
   amount: number;
-  modeOfPayment: string;
+  modeOfPayment: ModeOfPayment;
   transactionId: string | null;
   source: BillingRecordSource;
   legacyCustomerId: string | null;
@@ -286,6 +287,24 @@ export interface SmsUsageItem {
   failedMessages: number;
   lastPurchaseAt: string | null;
   lastMessageAt: string | null;
+}
+
+export interface SmsBalanceItem {
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  configStatus: ConfigStatus;
+  balanceStatus: 'AVAILABLE' | 'ERROR' | ConfigStatus;
+  balance: number | null;
+  lastCheckedAt: string | null;
+  error: string | null;
+  config: {
+    id: number | string;
+    partnerId?: string | null;
+    shortCode?: string | null;
+    customerSupportPhoneNumber?: string | null;
+    updatedAt: string;
+  } | null;
 }
 
 export interface MpesaTransactionItem {

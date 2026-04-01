@@ -16,7 +16,13 @@ import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
 import { api } from '../../services/api';
-import { MpesaConfigItem, MpesaTransactionItem, SmsConfigItem, SmsUsageItem } from '../../types';
+import {
+  MpesaConfigItem,
+  MpesaTransactionItem,
+  SmsBalanceItem,
+  SmsConfigItem,
+  SmsUsageItem,
+} from '../../types';
 import { compactNumberFormatter, currencyFormatter, formatDateTime } from '../../lib/format';
 
 type ConfigSummary = {
@@ -30,6 +36,15 @@ type SmsUsageSummary = {
   consumedMessages: number;
   failedMessages: number;
   purchaseAmount: number;
+};
+
+type SmsBalanceSummary = {
+  configured: number;
+  partial: number;
+  missing: number;
+  available: number;
+  errors: number;
+  totalBalance: number;
 };
 
 type MpesaTransactionSummary = {
@@ -55,6 +70,9 @@ type ActivityRow = {
   tenantId: number;
   tenantName: string;
   tenantStatus: string;
+  currentSmsBalance: number | null;
+  currentSmsBalanceStatus: string;
+  balanceCheckedAt: string | null;
   purchasedUnits: number;
   consumedMessages: number;
   failedMessages: number;
@@ -73,8 +91,10 @@ const Operations = () => {
   const [smsConfigSummary, setSmsConfigSummary] = useState<ConfigSummary | null>(null);
   const [mpesaConfigSummary, setMpesaConfigSummary] = useState<ConfigSummary | null>(null);
   const [smsUsageSummary, setSmsUsageSummary] = useState<SmsUsageSummary | null>(null);
+  const [smsBalanceSummary, setSmsBalanceSummary] = useState<SmsBalanceSummary | null>(null);
   const [mpesaTransactionSummary, setMpesaTransactionSummary] = useState<MpesaTransactionSummary | null>(null);
   const [smsConfigs, setSmsConfigs] = useState<SmsConfigItem[]>([]);
+  const [smsBalances, setSmsBalances] = useState<SmsBalanceItem[]>([]);
   const [mpesaConfigs, setMpesaConfigs] = useState<MpesaConfigItem[]>([]);
   const [smsUsage, setSmsUsage] = useState<SmsUsageItem[]>([]);
   const [mpesaTransactions, setMpesaTransactions] = useState<MpesaTransactionItem[]>([]);
@@ -89,9 +109,18 @@ const Operations = () => {
       setError(null);
 
       try {
-        const [smsConfigsResponse, mpesaConfigsResponse, smsUsageResponse, mpesaTransactionsResponse] =
+        const [
+          smsConfigsResponse,
+          smsBalancesResponse,
+          mpesaConfigsResponse,
+          smsUsageResponse,
+          mpesaTransactionsResponse,
+        ] =
           await Promise.all([
             api.get<{ summary: ConfigSummary; items: SmsConfigItem[] }>('/ops/sms-configs', {
+              params: { search: deferredSearch || undefined },
+            }),
+            api.get<{ summary: SmsBalanceSummary; items: SmsBalanceItem[] }>('/ops/sms-balances', {
               params: { search: deferredSearch || undefined },
             }),
             api.get<{ summary: ConfigSummary; items: MpesaConfigItem[] }>('/ops/mpesa-configs', {
@@ -113,10 +142,12 @@ const Operations = () => {
         }
 
         setSmsConfigSummary(smsConfigsResponse.data.summary);
+        setSmsBalanceSummary(smsBalancesResponse.data.summary);
         setMpesaConfigSummary(mpesaConfigsResponse.data.summary);
         setSmsUsageSummary(smsUsageResponse.data.summary);
         setMpesaTransactionSummary(mpesaTransactionsResponse.data.summary);
         setSmsConfigs(smsConfigsResponse.data.items);
+        setSmsBalances(smsBalancesResponse.data.items);
         setMpesaConfigs(mpesaConfigsResponse.data.items);
         setSmsUsage(smsUsageResponse.data.items);
         setMpesaTransactions(mpesaTransactionsResponse.data.items);
@@ -165,21 +196,27 @@ const Operations = () => {
 
   const activityRows = useMemo<ActivityRow[]>(() => {
     const smsMap = new Map(smsUsage.map((item) => [item.tenantId, item]));
+    const balanceMap = new Map(smsBalances.map((item) => [item.tenantId, item]));
     const mpesaMap = new Map(mpesaTransactions.map((item) => [item.tenantId, item]));
     const tenantIds = new Set<number>([
+      ...smsBalances.map((item) => item.tenantId),
       ...smsUsage.map((item) => item.tenantId),
       ...mpesaTransactions.map((item) => item.tenantId),
     ]);
 
     return Array.from(tenantIds).map((tenantId) => {
       const sms = smsMap.get(tenantId);
+      const balance = balanceMap.get(tenantId);
       const mpesa = mpesaMap.get(tenantId);
 
       return {
         id: tenantId,
         tenantId,
-        tenantName: sms?.tenantName ?? mpesa?.tenantName ?? `Tenant ${tenantId}`,
-        tenantStatus: sms?.tenantStatus ?? mpesa?.tenantStatus ?? 'UNKNOWN',
+        tenantName: balance?.tenantName ?? sms?.tenantName ?? mpesa?.tenantName ?? `Tenant ${tenantId}`,
+        tenantStatus: balance?.tenantStatus ?? sms?.tenantStatus ?? mpesa?.tenantStatus ?? 'UNKNOWN',
+        currentSmsBalance: balance?.balance ?? null,
+        currentSmsBalanceStatus: balance?.balanceStatus ?? balance?.configStatus ?? 'UNKNOWN',
+        balanceCheckedAt: balance?.lastCheckedAt ?? null,
         purchasedUnits: sms?.purchasedUnits ?? 0,
         consumedMessages: sms?.consumedMessages ?? 0,
         failedMessages: sms?.failedMessages ?? 0,
@@ -191,7 +228,7 @@ const Operations = () => {
         lastTransactionAt: mpesa?.lastTransactionAt ?? null,
       };
     });
-  }, [mpesaTransactions, smsUsage]);
+  }, [mpesaTransactions, smsBalances, smsUsage]);
 
   const coverageColumns = useMemo<GridColDef<CoverageRow>[]>(
     () => [
@@ -268,6 +305,19 @@ const Operations = () => {
         valueFormatter: (value) => compactNumberFormatter.format(value as number),
       },
       {
+        field: 'currentSmsBalance',
+        headerName: 'Live Balance',
+        minWidth: 130,
+        valueFormatter: (value) =>
+          value == null ? 'Unavailable' : compactNumberFormatter.format(value as number),
+      },
+      {
+        field: 'currentSmsBalanceStatus',
+        headerName: 'Balance Status',
+        minWidth: 150,
+        renderCell: (params) => <StatusChip status={params.value as string} />,
+      },
+      {
         field: 'consumedMessages',
         headerName: 'SMS Sent',
         minWidth: 120,
@@ -318,6 +368,12 @@ const Operations = () => {
         valueFormatter: (value) => formatDateTime(value as string | null, 'No transactions'),
       },
       {
+        field: 'balanceCheckedAt',
+        headerName: 'Balance Checked',
+        minWidth: 180,
+        valueFormatter: (value) => formatDateTime(value as string | null, 'Not checked'),
+      },
+      {
         field: 'actions',
         headerName: '',
         sortable: false,
@@ -337,7 +393,7 @@ const Operations = () => {
     <Stack spacing={3}>
       <PageHeader
         title="Operations"
-        subtitle="SMS and M-Pesa configuration coverage with platform-wide traffic and processing signals."
+        subtitle="SMS and M-Pesa configuration coverage, live tenant SMS balances, and platform-wide traffic signals."
         action={
           <TextField
             label="Search tenants"
@@ -367,6 +423,17 @@ const Operations = () => {
               mpesaConfigSummary
                 ? `${mpesaConfigSummary.partial} partial, ${mpesaConfigSummary.missing} missing`
                 : 'Coverage'
+            }
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} xl={3}>
+          <KpiCard
+            label="Live SMS Balance"
+            value={smsBalanceSummary ? compactNumberFormatter.format(smsBalanceSummary.totalBalance) : '...'}
+            helper={
+              smsBalanceSummary
+                ? `${smsBalanceSummary.available} tenants refreshed, ${smsBalanceSummary.errors} errors`
+                : 'Across configured tenants'
             }
           />
         </Grid>
