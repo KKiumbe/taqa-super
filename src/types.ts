@@ -322,6 +322,59 @@ export interface SmsBalanceItem {
   } | null;
 }
 
+export interface PlatformSmsSenderProfile {
+  tenantId: number;
+  tenantName: string;
+  partnerId: string;
+  shortCode: string;
+  customerSupportPhoneNumber: string;
+  balance: number | null;
+  balanceStatus: 'AVAILABLE' | 'ERROR';
+  lastCheckedAt: string | null;
+  error: string | null;
+}
+
+export interface SmsResalePaymentLink {
+  transactionId: string | null;
+  billRefNumber: string | null;
+  payerName: string | null;
+  amount: number | null;
+  shortCode: string | null;
+  processed: boolean | null;
+  createdAt: string | null;
+}
+
+export interface SmsResalePurchase {
+  id: string;
+  tenantId: number;
+  tenantName: string;
+  tenantStatus: TenantStatus;
+  phoneNumber: string;
+  amount: number;
+  smsUnits: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  creditedAt: string | null;
+  checkoutRequestId: string | null;
+  merchantRequestId: string | null;
+  receiptNumber: string | null;
+  reconciliationStatus: string;
+  payment: SmsResalePaymentLink | null;
+}
+
+export interface SmsResaleSummary {
+  totalPurchases: number;
+  totalAmount: number;
+  totalSmsUnits: number;
+  pending: number;
+  completed: number;
+  failed: number;
+  matched: number;
+  paidNotCredited: number;
+  awaitingPayment: number;
+}
+
 export interface MpesaTransactionItem {
   tenantId: number;
   tenantName: string;

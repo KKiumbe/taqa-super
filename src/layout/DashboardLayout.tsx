@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AppBar,
   Box,
@@ -26,12 +26,18 @@ import SmsRoundedIcon from '@mui/icons-material/SmsRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
+import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { PlatformSmsSenderProfile } from '../types';
 
 const drawerWidth = 280;
+const smsBalanceFormatter = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: 0,
+});
 
 const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [smsSender, setSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const muiTheme = useTheme();
@@ -46,11 +52,35 @@ const DashboardLayout = () => {
       { label: 'Billing', icon: <PaymentsRoundedIcon />, to: '/billing' },
       { label: 'Usage', icon: <InsightsRoundedIcon />, to: '/usage' },
       { label: 'Operations', icon: <BuildRoundedIcon />, to: '/operations' },
+      { label: 'SMS Resale', icon: <SmsRoundedIcon />, to: '/sms-resale' },
       { label: 'Communication', icon: <SmsRoundedIcon />, to: '/communication' },
       { label: 'Support', icon: <SupportAgentRoundedIcon />, to: '/support' },
     ],
     []
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSmsSender = async () => {
+      try {
+        const response = await api.get<{ sender: PlatformSmsSenderProfile }>('/support/sms-sender');
+        if (!cancelled) {
+          setSmsSender(response.data.sender);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSmsSender(null);
+        }
+      }
+    };
+
+    loadSmsSender();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const drawer = (
     <Box
@@ -154,6 +184,18 @@ const DashboardLayout = () => {
           </Box>
 
           <Stack direction="row" spacing={1.5} alignItems="center">
+            {smsSender ? (
+              <Chip
+                label={
+                  smsSender.balanceStatus === 'AVAILABLE'
+                    ? `SMS ${smsBalanceFormatter.format(smsSender.balance ?? 0)}`
+                    : 'SMS Error'
+                }
+                color={smsSender.balanceStatus === 'AVAILABLE' ? 'success' : 'warning'}
+                variant="outlined"
+                onClick={() => navigate('/sms-resale')}
+              />
+            ) : null}
             <Chip label={admin?.role ?? 'SUPER_ADMIN'} color="primary" variant="outlined" />
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="body2" fontWeight={700}>

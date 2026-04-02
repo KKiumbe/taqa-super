@@ -7,6 +7,7 @@ import Billing from './pages/billing/Billing';
 import Usage from './pages/usage/Usage';
 import Operations from './pages/operations/Operations';
 import Support from './pages/support/Support';
+import SmsResale from './pages/smsResale/SmsResale';
 import TenantsList from './pages/tenants/TenantsList';
 import CreateTenant from './pages/tenants/CreateTenant';
 import TenantDetail from './pages/tenants/TenantDetail';
@@ -34,6 +35,7 @@ const App = () => {
           <Route path="/billing" element={<Billing />} />
           <Route path="/usage" element={<Usage />} />
           <Route path="/operations" element={<Operations />} />
+          <Route path="/sms-resale" element={<SmsResale />} />
           <Route path="/communication" element={<Support />} />
           <Route path="/support" element={<Support />} />
         </Route>

@@ -19,6 +19,15 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
   UNPAID: { label: 'Unpaid', color: 'error' },
   CANCELLED: { label: 'Cancelled', color: 'default' },
   COMPLETED: { label: 'Completed', color: 'success' },
+  FAILED: { label: 'Failed', color: 'error' },
+  PENDING: { label: 'Pending', color: 'warning' },
+  MATCHED: { label: 'Matched', color: 'success' },
+  PAID_NOT_CREDITED: { label: 'Paid Not Credited', color: 'warning' },
+  AWAITING_PAYMENT: { label: 'Awaiting Payment', color: 'default' },
+  PAYMENT_RECEIVED_CREDIT_FAILED: { label: 'Credit Failed', color: 'error' },
+  COMPLETED_NO_PAYMENT_LINK: { label: 'Credited', color: 'success' },
+  PROCESSED: { label: 'Processed', color: 'success' },
+  UNPROCESSED: { label: 'Unprocessed', color: 'warning' },
   UNKNOWN: { label: 'Unknown', color: 'default' },
 };
 
