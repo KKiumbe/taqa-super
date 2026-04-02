@@ -2,9 +2,17 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
   MenuItem,
   Paper,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -16,12 +24,13 @@ import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
 import { currencyFormatter, formatDateTime } from '../../lib/format';
 import { api } from '../../services/api';
-import { PaginationMeta, SmsResalePurchase, SmsResaleSummary } from '../../types';
+import { PaginationMeta, SmsResalePurchase, SmsResaleSummary, TenantSummary } from '../../types';
 
 const purchaseStatuses = ['ALL', 'PENDING', 'COMPLETED', 'FAILED'] as const;
 
 const SmsResale = () => {
   const navigate = useNavigate();
+  const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [rows, setRows] = useState<SmsResalePurchase[]>([]);
   const [summary, setSummary] = useState<SmsResaleSummary | null>(null);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -32,7 +41,15 @@ const SmsResale = () => {
   const [statusFilter, setStatusFilter] = useState<(typeof purchaseStatuses)[number]>('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tenantOptionsLoading, setTenantOptionsLoading] = useState(false);
+  const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
+  const [selectedTopUpTenantId, setSelectedTopUpTenantId] = useState('');
+  const [smsTopUpUnitsDraft, setSmsTopUpUnitsDraft] = useState('');
+  const [smsTopUpReasonDraft, setSmsTopUpReasonDraft] = useState('Platform SMS top-up');
+  const [toppingUpSms, setToppingUpSms] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
@@ -79,7 +96,102 @@ const SmsResale = () => {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch, paginationModel.page, paginationModel.pageSize, statusFilter]);
+  }, [deferredSearch, paginationModel.page, paginationModel.pageSize, refreshKey, statusFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTenantOptions = async () => {
+      setTenantOptionsLoading(true);
+
+      try {
+        const response = await api.get<{ tenants: TenantSummary[] }>('/tenants', {
+          params: {
+            page: 1,
+            limit: 250,
+          },
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextTenants = [...response.data.tenants].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        );
+
+        setTenants(nextTenants);
+        setSelectedTopUpTenantId((current) => current || String(nextTenants[0]?.id ?? ''));
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message ?? 'Failed to load tenant options');
+        }
+      } finally {
+        if (!cancelled) {
+          setTenantOptionsLoading(false);
+        }
+      }
+    };
+
+    loadTenantOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedTopUpTenant = useMemo(
+    () => tenants.find((tenant) => String(tenant.id) === selectedTopUpTenantId) ?? null,
+    [selectedTopUpTenantId, tenants]
+  );
+
+  const resetTopUpDialog = () => {
+    setTopUpDialogOpen(false);
+    setSelectedTopUpTenantId((current) => current || String(tenants[0]?.id ?? ''));
+    setSmsTopUpUnitsDraft('');
+    setSmsTopUpReasonDraft('Platform SMS top-up');
+  };
+
+  const openTopUpDialog = (tenantId?: number) => {
+    setSelectedTopUpTenantId(
+      tenantId ? String(tenantId) : selectedTopUpTenantId || String(tenants[0]?.id ?? '')
+    );
+    setTopUpDialogOpen(true);
+  };
+
+  const topUpTenantSms = async () => {
+    const tenantId = Number.parseInt(selectedTopUpTenantId, 10);
+    const smsUnits = Number.parseInt(smsTopUpUnitsDraft, 10);
+
+    if (!Number.isInteger(tenantId) || tenantId <= 0) {
+      setError('Choose a tenant before crediting SMS.');
+      return;
+    }
+
+    if (!Number.isInteger(smsUnits) || smsUnits < 1) {
+      setError('SMS top-up units must be a positive whole number.');
+      return;
+    }
+
+    setToppingUpSms(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.post(`/tenants/${tenantId}/sms-topups`, {
+        smsUnits,
+        reason: smsTopUpReasonDraft.trim() || 'Platform SMS top-up',
+      });
+
+      setRefreshKey((current) => current + 1);
+      setSuccess(`Credited ${smsUnits} SMS units to ${selectedTopUpTenant?.name ?? `tenant ${tenantId}`}.`);
+      resetTopUpDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to top up SMS');
+    } finally {
+      setToppingUpSms(false);
+    }
+  };
 
   const columns = useMemo<GridColDef<SmsResalePurchase>[]>(
     () => [
@@ -183,28 +295,22 @@ const SmsResale = () => {
       {
         field: 'actions',
         headerName: '',
-        minWidth: 120,
+        minWidth: 220,
         sortable: false,
         filterable: false,
         renderCell: (params) => (
-          <Typography
-            component="button"
-            type="button"
-            onClick={() => navigate(`/tenants/${params.row.tenantId}`)}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: '#204b4d',
-              cursor: 'pointer',
-              fontWeight: 700,
-            }}
-          >
-            Open tenant
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ py: 1 }}>
+            <Button size="small" variant="text" onClick={() => navigate(`/tenants/${params.row.tenantId}`)}>
+              Open tenant
+            </Button>
+            <Button size="small" variant="outlined" onClick={() => openTopUpDialog(params.row.tenantId)}>
+              Top up SMS
+            </Button>
+          </Stack>
         ),
       },
     ],
-    [navigate]
+    [navigate, tenants]
   );
 
   return (
@@ -214,6 +320,9 @@ const SmsResale = () => {
         subtitle="Track tenant SMS purchases, STK request refs, and the linked M-Pesa payment transaction from one workspace."
         action={
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <Button variant="contained" onClick={() => openTopUpDialog()} disabled={tenantOptionsLoading}>
+              Manual SMS Top-up
+            </Button>
             <TextField
               label="Search"
               value={search}
@@ -245,6 +354,7 @@ const SmsResale = () => {
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
+      {success ? <Alert severity="success">{success}</Alert> : null}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} xl={2}>
@@ -296,6 +406,64 @@ const SmsResale = () => {
           />
         </Box>
       </Paper>
+
+      <Dialog open={topUpDialogOpen} onClose={toppingUpSms ? undefined : resetTopUpDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Manual SMS Top-up</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Credit tenant SMS units directly from the resale workspace.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel id="sms-resale-tenant-label">Tenant</InputLabel>
+              <Select
+                labelId="sms-resale-tenant-label"
+                label="Tenant"
+                value={selectedTopUpTenantId}
+                onChange={(event) => setSelectedTopUpTenantId(event.target.value)}
+                disabled={tenantOptionsLoading}
+              >
+                {tenants.map((tenant) => (
+                  <MenuItem key={tenant.id} value={String(tenant.id)}>
+                    {tenant.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {selectedTopUpTenant ? (
+              <Typography variant="body2" color="text.secondary">
+                {selectedTopUpTenant.status} tenant · {selectedTopUpTenant.plan.name}
+              </Typography>
+            ) : null}
+            <TextField
+              label="SMS Units"
+              type="number"
+              inputProps={{ min: 1, step: 1 }}
+              value={smsTopUpUnitsDraft}
+              onChange={(event) => setSmsTopUpUnitsDraft(event.target.value)}
+              placeholder="0"
+            />
+            <TextField
+              label="Reason"
+              value={smsTopUpReasonDraft}
+              onChange={(event) => setSmsTopUpReasonDraft(event.target.value)}
+              placeholder="Platform SMS top-up"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetTopUpDialog} disabled={toppingUpSms}>
+            Cancel
+          </Button>
+          <Button
+            onClick={topUpTenantSms}
+            variant="contained"
+            disabled={toppingUpSms || tenantOptionsLoading}
+          >
+            {toppingUpSms ? 'Crediting SMS...' : 'Credit SMS'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };
