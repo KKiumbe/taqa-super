@@ -92,104 +92,104 @@ const Dashboard = () => {
             color: 'common.white',
           }}
         >
-          <Grid container spacing={2.5}>
-            <Grid item xs={12} lg={7}>
-              <Stack spacing={2.25}>
-                <Box>
-                  <Typography variant="overline" sx={{ opacity: 0.75 }}>
-                    Operations Brief
-                  </Typography>
-                  <Typography variant="h3" sx={{ color: 'common.white', mt: 0.75, maxWidth: 620 }}>
-                    {recoveryCount
-                      ? `${recoveryCount} tenant account${recoveryCount === 1 ? '' : 's'} need follow-up.`
-                      : 'Platform health is steady across the tenant base.'}
-                  </Typography>
-                  <Typography variant="body1" sx={{ mt: 1.25, maxWidth: 620, opacity: 0.82 }}>
-                    Monitor subscription performance, quickly spot collection gaps, and jump straight
-                    into the tenant queue that needs action today.
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip
-                    label={`${compactNumberFormatter.format(overview.activeTenants)} active tenants`}
-                    sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
-                  />
-                  <Chip
-                    label={`${overview.unpaidInvoiceCount} unpaid invoice${overview.unpaidInvoiceCount === 1 ? '' : 's'}`}
-                    sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
-                  />
-                  <Chip
-                    label={`${compactNumberFormatter.format(overview.activeUsersLast30Days)} active users in 30d`}
-                    sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
-                  />
-                </Stack>
+          <Stack spacing={3}>
+            <Stack spacing={2.25}>
+              <Box>
+                <Typography variant="overline" sx={{ opacity: 0.75 }}>
+                  Operations Brief
+                </Typography>
+                <Typography variant="h3" sx={{ color: 'common.white', mt: 0.75, maxWidth: 720 }}>
+                  {recoveryCount
+                    ? `${recoveryCount} tenant account${recoveryCount === 1 ? '' : 's'} need follow-up.`
+                    : 'Platform health is steady across the tenant base.'}
+                </Typography>
+                <Typography variant="body1" sx={{ mt: 1.25, maxWidth: 760, opacity: 0.82 }}>
+                  Monitor subscription performance, quickly spot collection gaps, and jump straight
+                  into the tenant queue that needs action today.
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                <Chip
+                  label={`${compactNumberFormatter.format(overview.activeTenants)} active tenants`}
+                  sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
+                />
+                <Chip
+                  label={`${overview.unpaidInvoiceCount} unpaid invoice${overview.unpaidInvoiceCount === 1 ? '' : 's'}`}
+                  sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
+                />
+                <Chip
+                  label={`${compactNumberFormatter.format(overview.activeUsersLast30Days)} active users in 30d`}
+                  sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
+                />
               </Stack>
-            </Grid>
-            <Grid item xs={12} lg={5}>
-              <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={4} lg={12}>
-                  <Paper
-                    sx={{
-                      p: 2,
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      color: 'inherit',
-                      borderColor: 'rgba(255,255,255,0.12)',
-                    }}
-                  >
-                    <Typography variant="overline" sx={{ opacity: 0.72 }}>
-                      Monthly Revenue
-                    </Typography>
-                    <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
-                      {currencyFormatter.format(overview.mrr)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                      Current-month invoice value.
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4} lg={12}>
-                  <Paper
-                    sx={{
-                      p: 2,
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      color: 'inherit',
-                      borderColor: 'rgba(255,255,255,0.12)',
-                    }}
-                  >
-                    <Typography variant="overline" sx={{ opacity: 0.72 }}>
-                      Outstanding Balance
-                    </Typography>
-                    <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
-                      {currencyFormatter.format(overview.unpaidInvoiceAmount)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                      Across unpaid platform invoices.
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4} lg={12}>
-                  <Paper
-                    sx={{
-                      p: 2,
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      color: 'inherit',
-                      borderColor: 'rgba(255,255,255,0.12)',
-                    }}
-                  >
-                    <Typography variant="overline" sx={{ opacity: 0.72 }}>
-                      Recovery Queue
-                    </Typography>
-                    <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
-                      {compactNumberFormatter.format(recoveryCount)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                      Disabled or expired tenants awaiting intervention.
-                    </Typography>
-                  </Paper>
-                </Grid>
+            </Stack>
+
+            <Grid container spacing={1.5}>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    minHeight: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    color: 'inherit',
+                    borderColor: 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <Typography variant="overline" sx={{ opacity: 0.72 }}>
+                    Monthly Revenue
+                  </Typography>
+                  <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
+                    {currencyFormatter.format(overview.mrr)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Current-month invoice value.
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    minHeight: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    color: 'inherit',
+                    borderColor: 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <Typography variant="overline" sx={{ opacity: 0.72 }}>
+                    Outstanding Balance
+                  </Typography>
+                  <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
+                    {currencyFormatter.format(overview.unpaidInvoiceAmount)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Across unpaid platform invoices.
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    minHeight: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    color: 'inherit',
+                    borderColor: 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <Typography variant="overline" sx={{ opacity: 0.72 }}>
+                    Recovery Queue
+                  </Typography>
+                  <Typography variant="h5" sx={{ color: 'common.white', mt: 0.5 }}>
+                    {compactNumberFormatter.format(recoveryCount)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Disabled or expired tenants awaiting intervention.
+                  </Typography>
+                </Paper>
               </Grid>
             </Grid>
-          </Grid>
+          </Stack>
         </Paper>
       ) : null}
 

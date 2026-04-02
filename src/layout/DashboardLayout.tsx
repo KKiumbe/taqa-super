@@ -650,12 +650,11 @@ const DashboardLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          width: '100%',
-          ml: { lg: `${drawerOffset}px` },
+          minWidth: 0,
           px: { xs: 1, sm: 1.5, md: 2.5 },
           pb: { xs: 10, md: 6 },
           pt: { xs: 1.5, md: 3 },
-          transition: 'margin 200ms ease, padding 200ms ease',
+          transition: 'padding 200ms ease',
         }}
       >
         <Box sx={{ height: { xs: 84, md: 98 } }} />
