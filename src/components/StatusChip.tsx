@@ -28,6 +28,9 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
   COMPLETED_NO_PAYMENT_LINK: { label: 'Credited', color: 'success' },
   PROCESSED: { label: 'Processed', color: 'success' },
   UNPROCESSED: { label: 'Unprocessed', color: 'warning' },
+  DIRECT: { label: 'Direct SMS', color: 'success' },
+  BULK: { label: 'Bulk SMS', color: 'default' },
+  BILL_REMINDER: { label: 'Bill Reminder', color: 'warning' },
   UNKNOWN: { label: 'Unknown', color: 'default' },
 };
 

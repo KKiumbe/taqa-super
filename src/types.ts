@@ -439,3 +439,35 @@ export interface PlatformBulkSmsSummary {
   skippedTenants: PlatformBulkSkippedTenant[];
   paybill?: string;
 }
+
+export type PlatformSentSmsKind = 'DIRECT' | 'BULK' | 'BILL_REMINDER';
+
+export interface PlatformSentSmsLogRow {
+  id: string;
+  kind: PlatformSentSmsKind;
+  action: string;
+  createdAt: string;
+  message: string | null;
+  messagePreview: string | null;
+  paybill: string | null;
+  recipientCount: number;
+  recipients: string[];
+  sentCount: number | null;
+  failedCount: number | null;
+  admin: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  sender: {
+    tenantId: number | null;
+    tenantName: string | null;
+    partnerId: string | null;
+  };
+  target: {
+    tenantId: number | null;
+    tenantName: string | null;
+    tenantCount: number;
+    targetedTenantIds: number[];
+  };
+}

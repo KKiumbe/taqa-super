@@ -21,6 +21,8 @@ import {
   PaginationMeta,
   PlatformActionLogRow,
   PlatformBulkSmsSummary,
+  PlatformSentSmsKind,
+  PlatformSentSmsLogRow,
   TenantSummary,
 } from '../../types';
 import { formatDateTime } from '../../lib/format';
@@ -46,6 +48,20 @@ type BulkActionResult = {
   summary: PlatformBulkSmsSummary;
 };
 
+const sentSmsKinds = ['ALL', 'DIRECT', 'BULK', 'BILL_REMINDER'] as const;
+
+const formatSentSmsKind = (kind: PlatformSentSmsKind) => {
+  switch (kind) {
+    case 'BILL_REMINDER':
+      return 'Bill Reminder';
+    case 'BULK':
+      return 'Bulk SMS';
+    case 'DIRECT':
+    default:
+      return 'Direct SMS';
+  }
+};
+
 const formatCurrencyAmount = (value?: number) => {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return null;
@@ -62,8 +78,10 @@ const Support = () => {
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [platformLogs, setPlatformLogs] = useState<PlatformActionLogRow[]>([]);
+  const [sentSmsLogs, setSentSmsLogs] = useState<PlatformSentSmsLogRow[]>([]);
   const [auditPagination, setAuditPagination] = useState<PaginationMeta | null>(null);
   const [platformPagination, setPlatformPagination] = useState<PaginationMeta | null>(null);
+  const [sentSmsPagination, setSentSmsPagination] = useState<PaginationMeta | null>(null);
   const [auditPaginationModel, setAuditPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 10,
@@ -72,6 +90,12 @@ const Support = () => {
     page: 0,
     pageSize: 10,
   });
+  const [sentSmsPaginationModel, setSentSmsPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 10,
+  });
+  const [sentSmsKindFilter, setSentSmsKindFilter] =
+    useState<(typeof sentSmsKinds)[number]>('ALL');
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [platformSmsSender, setPlatformSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
   const [smsRecipientsDraft, setSmsRecipientsDraft] = useState('');
@@ -86,6 +110,7 @@ const Support = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [bulkActionResult, setBulkActionResult] = useState<BulkActionResult | null>(null);
+  const [sentSmsLoading, setSentSmsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -121,6 +146,53 @@ const Support = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSentSms = async () => {
+      setSentSmsLoading(true);
+
+      try {
+        const response = await api.get<{ logs: PlatformSentSmsLogRow[]; pagination: PaginationMeta }>(
+          '/support/sent-sms',
+          {
+            params: {
+              page: sentSmsPaginationModel.page + 1,
+              limit: sentSmsPaginationModel.pageSize,
+              kind: sentSmsKindFilter === 'ALL' ? undefined : sentSmsKindFilter,
+            },
+          }
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setSentSmsLogs(response.data.logs);
+        setSentSmsPagination(response.data.pagination);
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message ?? 'Failed to load sent SMS history');
+        }
+      } finally {
+        if (!cancelled) {
+          setSentSmsLoading(false);
+        }
+      }
+    };
+
+    loadSentSms();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    refreshKey,
+    sentSmsKindFilter,
+    sentSmsPaginationModel.page,
+    sentSmsPaginationModel.pageSize,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -420,6 +492,107 @@ const Support = () => {
     []
   );
 
+  const sentSmsColumns = useMemo<GridColDef<PlatformSentSmsLogRow>[]>(
+    () => [
+      {
+        field: 'createdAt',
+        headerName: 'Time',
+        minWidth: 180,
+        valueFormatter: (value) => formatDateTime(value as string),
+      },
+      {
+        field: 'kind',
+        headerName: 'Type',
+        minWidth: 150,
+        renderCell: (params) => <StatusChip status={params.value as string} />,
+        valueFormatter: (value) => formatSentSmsKind(value as PlatformSentSmsKind),
+      },
+      {
+        field: 'admin',
+        headerName: 'Admin',
+        flex: 0.9,
+        minWidth: 200,
+        sortable: false,
+        renderCell: (params) => (
+          <Box sx={{ py: 1 }}>
+            <Typography fontWeight={700}>{params.row.admin.name}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {params.row.admin.email}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1,
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params) => (
+          <Box sx={{ py: 1 }}>
+            <Typography fontWeight={700}>
+              {params.row.target.tenantName ??
+                (params.row.target.tenantCount > 0
+                  ? `${params.row.target.tenantCount} tenant(s)`
+                  : 'Platform broadcast')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Sender: {params.row.sender.tenantName ?? `Tenant ${params.row.sender.tenantId ?? '-'}`}
+              {params.row.sender.partnerId ? ` · Partner ${params.row.sender.partnerId}` : ''}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: 'recipientCount',
+        headerName: 'Recipients',
+        minWidth: 210,
+        sortable: false,
+        renderCell: (params) => (
+          <Box sx={{ py: 1 }}>
+            <Typography fontWeight={700}>{params.row.recipientCount}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {params.row.recipients.length
+                ? params.row.recipients.slice(0, 2).join(', ')
+                : 'No recipient sample saved'}
+              {params.row.recipientCount > params.row.recipients.length && params.row.recipients.length
+                ? ` +${params.row.recipientCount - params.row.recipients.length} more`
+                : ''}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: 'messagePreview',
+        headerName: 'Message',
+        flex: 1.4,
+        minWidth: 320,
+        sortable: false,
+        renderCell: (params) => (
+          <Box sx={{ py: 1 }}>
+            <Typography sx={{ whiteSpace: 'normal', lineHeight: 1.4 }}>
+              {params.row.message ?? params.row.messagePreview ?? 'No message text recorded'}
+            </Typography>
+            {params.row.paybill ? (
+              <Typography variant="body2" color="text.secondary">
+                Paybill {params.row.paybill}
+              </Typography>
+            ) : null}
+          </Box>
+        ),
+      },
+      {
+        field: 'delivery',
+        headerName: 'Result',
+        minWidth: 150,
+        sortable: false,
+        valueGetter: (_, row) =>
+          `${row.sentCount ?? row.recipientCount} sent / ${row.failedCount ?? 0} failed`,
+      },
+    ],
+    []
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -431,21 +604,28 @@ const Support = () => {
       {success ? <Alert severity="success">{success}</Alert> : null}
 
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="Tenant Audit Logs"
             value={auditPagination?.total ?? '...'}
             helper="Tenant-scoped activity across the platform"
           />
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="Platform Action Logs"
             value={platformPagination?.total ?? '...'}
             helper="Actions taken by platform admins"
           />
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard
+            label="Sent SMS Logs"
+            value={sentSmsPagination?.total ?? '...'}
+            helper="Direct, bulk, and bill-reminder sends"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <KpiCard label="Tenant Options" value={tenants.length} helper="Available in the note composer" />
         </Grid>
       </Grid>
@@ -647,6 +827,61 @@ const Support = () => {
               </Button>
             ) : null}
           </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ p: 2.5 }}>
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="overline" color="primary">
+              Sent SMS History
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Platform-originated SMS sends from the super-admin console. Older entries may show only
+              previews and recipient counts if they were logged before the richer audit payload was added.
+            </Typography>
+          </Box>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              select
+              label="SMS Type"
+              value={sentSmsKindFilter}
+              onChange={(event) => {
+                setSentSmsKindFilter(event.target.value as (typeof sentSmsKinds)[number]);
+                setSentSmsPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              sx={{ minWidth: 220 }}
+            >
+              {sentSmsKinds.map((kind) => (
+                <MenuItem key={kind} value={kind}>
+                  {kind === 'ALL' ? 'All SMS' : formatSentSmsKind(kind)}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>
+              {sentSmsPagination?.total ?? 0} logged send action(s)
+            </Typography>
+          </Stack>
+          <Box sx={{ height: 430 }}>
+            <DataGrid
+              rows={sentSmsLogs}
+              columns={sentSmsColumns}
+              loading={sentSmsLoading}
+              rowCount={sentSmsPagination?.total ?? 0}
+              paginationMode="server"
+              paginationModel={sentSmsPaginationModel}
+              onPaginationModelChange={setSentSmsPaginationModel}
+              pageSizeOptions={[10, 20, 50]}
+              disableRowSelectionOnClick
+              getRowHeight={() => 'auto'}
+              sx={{
+                '& .MuiDataGrid-cell': {
+                  alignItems: 'flex-start',
+                  py: 1,
+                },
+              }}
+            />
+          </Box>
         </Stack>
       </Paper>
 
