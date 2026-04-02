@@ -57,6 +57,8 @@ export interface TenantDetail {
   name: string;
   createdBy: string;
   status: TenantStatus;
+  subscriptionPlan: string;
+  monthlyCharge: number;
   createdAt: string;
   updatedAt: string;
   email: string | null;
@@ -72,6 +74,19 @@ export interface TenantDetail {
   allowedUsers: number;
   paymentDetails: string | null;
   numberOfBags: number | null;
+  smsOnUnmatchedPayment: boolean;
+  smsConfig: {
+    partnerId: string | null;
+    shortCode: string | null;
+    customerSupportPhoneNumber: string | null;
+    childId: string | null;
+    updatedAt: string;
+  } | null;
+  mpesaConfig: {
+    shortCode: string | null;
+    name: string | null;
+    updatedAt: string;
+  } | null;
   subscription: PlanSummary;
   counters: {
     users: number;

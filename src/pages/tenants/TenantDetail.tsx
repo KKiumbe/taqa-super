@@ -5,6 +5,10 @@ import {
   Button,
   Chip,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   Grid,
   InputLabel,
@@ -65,6 +69,62 @@ type PlatformSmsSenderProfile = {
   customerSupportPhoneNumber: string;
 };
 
+type TenantEditDraft = {
+  name: string;
+  subscriptionPlan: string;
+  monthlyCharge: string;
+  email: string;
+  phoneNumber: string;
+  alternativePhoneNumber: string;
+  county: string;
+  town: string;
+  address: string;
+  building: string;
+  street: string;
+  website: string;
+  paymentDetails: string;
+  allowedUsers: string;
+  numberOfBags: string;
+  smsPartnerId: string;
+  smsShortCode: string;
+  smsSupportPhone: string;
+  smsChildId: string;
+  smsApiKey: string;
+  mpesaShortCode: string;
+  mpesaName: string;
+  mpesaApiKey: string;
+  mpesaPassKey: string;
+  mpesaSecretKey: string;
+};
+
+const buildTenantEditDraft = (tenant: TenantDetailType): TenantEditDraft => ({
+  name: tenant.name,
+  subscriptionPlan: tenant.subscriptionPlan,
+  monthlyCharge: toAmountInput(tenant.monthlyCharge),
+  email: tenant.email || '',
+  phoneNumber: tenant.phoneNumber || '',
+  alternativePhoneNumber: tenant.alternativePhoneNumber || '',
+  county: tenant.county || '',
+  town: tenant.town || '',
+  address: tenant.address || '',
+  building: tenant.building || '',
+  street: tenant.street || '',
+  website: tenant.website || '',
+  paymentDetails: tenant.paymentDetails || '',
+  allowedUsers: String(tenant.allowedUsers || 1),
+  numberOfBags: tenant.numberOfBags ? String(tenant.numberOfBags) : '',
+  smsPartnerId: tenant.smsConfig?.partnerId || '',
+  smsShortCode: tenant.smsConfig?.shortCode || '',
+  smsSupportPhone: tenant.smsConfig?.customerSupportPhoneNumber || '',
+  smsChildId: tenant.smsConfig?.childId || '',
+  smsApiKey: '',
+  mpesaShortCode: tenant.mpesaConfig?.shortCode || '',
+  mpesaName: tenant.mpesaConfig?.name || '',
+  mpesaApiKey: '',
+  mpesaPassKey: '',
+  mpesaSecretKey: '',
+});
+
 const DetailMetric = ({ label, value }: { label: string; value: string }) => (
   <Box>
     <Typography variant="overline" color="text.secondary">
@@ -80,6 +140,7 @@ const TenantDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [tenant, setTenant] = useState<TenantDetailType | null>(null);
+  const [editDraft, setEditDraft] = useState<TenantEditDraft | null>(null);
   const [billingInvoices, setBillingInvoices] = useState<PlatformInvoice[]>([]);
   const [statusDraft, setStatusDraft] = useState<TenantStatus>('ACTIVE');
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
@@ -95,12 +156,19 @@ const TenantDetail = () => {
   const [loading, setLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
+  const [toppingUpSms, setToppingUpSms] = useState(false);
+  const [smsTopUpUnitsDraft, setSmsTopUpUnitsDraft] = useState('');
+  const [smsTopUpReasonDraft, setSmsTopUpReasonDraft] = useState('Platform SMS top-up');
   const [noteDraft, setNoteDraft] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmationDraft, setDeleteConfirmationDraft] = useState('');
+  const [deletingTenant, setDeletingTenant] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -134,11 +202,12 @@ const TenantDetail = () => {
         }
 
         setTenant(tenantResponse.data.tenant);
+        setEditDraft(buildTenantEditDraft(tenantResponse.data.tenant));
         setStatusDraft(tenantResponse.data.tenant.status);
         setBillingInvoices(invoicesResponse.data.invoices);
         setPlatformSmsSender(senderResponse.data.sender);
         setInvoiceAmountDraft((current) =>
-          current || toAmountInput(tenantResponse.data.tenant.subscription.priceMonthly)
+          current || toAmountInput(tenantResponse.data.tenant.monthlyCharge)
         );
         setSmsRecipientsDraft((current) =>
           current ||
@@ -177,6 +246,7 @@ const TenantDetail = () => {
     ]);
 
     setTenant(tenantResponse.data.tenant);
+    setEditDraft(buildTenantEditDraft(tenantResponse.data.tenant));
     setStatusDraft(tenantResponse.data.tenant.status);
     setBillingInvoices(invoicesResponse.data.invoices);
     setSmsRecipientsDraft((current) =>
@@ -188,6 +258,9 @@ const TenantDetail = () => {
   };
 
   const statusDirty = tenant ? tenant.status !== statusDraft : false;
+  const deleteConfirmationMatches = tenant
+    ? deleteConfirmationDraft.trim().toLowerCase() === tenant.name.trim().toLowerCase()
+    : false;
 
   const addressLine = useMemo(() => {
     if (!tenant) {
@@ -224,6 +297,160 @@ const TenantDetail = () => {
         .filter(Boolean).length,
     [smsRecipientsDraft]
   );
+
+  const updateEditDraft = (field: keyof TenantEditDraft, value: string) => {
+    setEditDraft((current) =>
+      current
+        ? {
+            ...current,
+            [field]: value,
+          }
+        : current
+    );
+  };
+
+  const saveTenantDetails = async () => {
+    if (!tenant || !editDraft) {
+      return;
+    }
+
+    if (!editDraft.name.trim()) {
+      setError('Tenant name is required.');
+      return;
+    }
+
+    if (!editDraft.subscriptionPlan.trim()) {
+      setError('Subscription plan label is required.');
+      return;
+    }
+
+    const monthlyCharge = Number.parseFloat(editDraft.monthlyCharge);
+    const allowedUsers = Number.parseInt(editDraft.allowedUsers, 10);
+    const numberOfBags =
+      editDraft.numberOfBags.trim() === '' ? undefined : Number.parseInt(editDraft.numberOfBags, 10);
+
+    if (!Number.isFinite(monthlyCharge) || monthlyCharge <= 0) {
+      setError('Monthly charge must be greater than zero.');
+      return;
+    }
+
+    if (!Number.isInteger(allowedUsers) || allowedUsers < 1) {
+      setError('Allowed users must be at least 1.');
+      return;
+    }
+
+    if (
+      editDraft.numberOfBags.trim() !== '' &&
+      (numberOfBags === undefined || !Number.isInteger(numberOfBags) || numberOfBags < 0)
+    ) {
+      setError('Number of bags must be zero or greater.');
+      return;
+    }
+
+    setDetailsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.patch(`/tenants/${tenant.id}`, {
+        name: editDraft.name.trim(),
+        subscriptionPlan: editDraft.subscriptionPlan.trim(),
+        monthlyCharge,
+        email: editDraft.email.trim() || null,
+        phoneNumber: editDraft.phoneNumber.trim() || null,
+        alternativePhoneNumber: editDraft.alternativePhoneNumber.trim() || null,
+        county: editDraft.county.trim() || null,
+        town: editDraft.town.trim() || null,
+        address: editDraft.address.trim() || null,
+        building: editDraft.building.trim() || null,
+        street: editDraft.street.trim() || null,
+        website: editDraft.website.trim() || null,
+        paymentDetails: editDraft.paymentDetails.trim() || null,
+        allowedUsers,
+        numberOfBags: editDraft.numberOfBags.trim() === '' ? null : numberOfBags ?? null,
+        smsConfig: {
+          partnerId: editDraft.smsPartnerId,
+          shortCode: editDraft.smsShortCode,
+          customerSupportPhoneNumber: editDraft.smsSupportPhone,
+          childId: editDraft.smsChildId,
+          apiKey: editDraft.smsApiKey,
+        },
+        mpesaConfig: {
+          shortCode: editDraft.mpesaShortCode,
+          name: editDraft.mpesaName,
+          apiKey: editDraft.mpesaApiKey,
+          passKey: editDraft.mpesaPassKey,
+          secretKey: editDraft.mpesaSecretKey,
+        },
+      });
+
+      await refreshTenantWorkspace(tenant.id);
+      setSuccess(`Updated ${editDraft.name.trim()}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to update tenant');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
+
+  const topUpTenantSms = async () => {
+    if (!tenant) {
+      return;
+    }
+
+    const smsUnits = Number.parseInt(smsTopUpUnitsDraft, 10);
+    if (!Number.isInteger(smsUnits) || smsUnits < 1) {
+      setError('SMS top-up units must be a positive whole number.');
+      return;
+    }
+
+    setToppingUpSms(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.post(`/tenants/${tenant.id}/sms-topups`, {
+        smsUnits,
+        reason: smsTopUpReasonDraft.trim() || 'Platform SMS top-up',
+      });
+
+      setSmsTopUpUnitsDraft('');
+      setSmsTopUpReasonDraft('Platform SMS top-up');
+      setSuccess(`Credited ${smsUnits} SMS units to ${tenant.name}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to top up SMS');
+    } finally {
+      setToppingUpSms(false);
+    }
+  };
+
+  const deleteTenant = async () => {
+    if (!tenant || !deleteConfirmationMatches) {
+      setError(`Type "${tenant?.name ?? 'the tenant name'}" to confirm deletion.`);
+      return;
+    }
+
+    setDeletingTenant(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const tenantName = tenant.name;
+      await api.delete(`/tenants/${tenant.id}`);
+      navigate('/tenants', {
+        replace: true,
+        state: {
+          deletedTenantName: tenantName,
+        },
+      });
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to delete tenant');
+    } finally {
+      setDeletingTenant(false);
+      setDeleteDialogOpen(false);
+      setDeleteConfirmationDraft('');
+    }
+  };
 
   const saveStatus = async () => {
     if (!tenant || !statusDirty) {
@@ -467,6 +694,9 @@ const TenantDetail = () => {
             >
               Back
             </Button>
+            <Button color="error" variant="outlined" onClick={() => setDeleteDialogOpen(true)}>
+              Delete Tenant
+            </Button>
             <Button variant="contained" onClick={saveStatus} disabled={!statusDirty || saving}>
               {saving ? 'Saving...' : 'Save Status'}
             </Button>
@@ -568,6 +798,257 @@ const TenantDetail = () => {
           </Paper>
         </Grid>
 
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Stack spacing={2.5}>
+              <Box>
+                <Typography variant="overline" color="primary">
+                  Tenant Settings
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Update the tenant profile, software billing settings, and the SMS or M-Pesa config
+                  used by the tenant app. Secret keys are optional here and only overwrite existing
+                  values when you enter new ones.
+                </Typography>
+              </Box>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Tenant Name"
+                    value={editDraft?.name ?? ''}
+                    onChange={(event) => updateEditDraft('name', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Subscription Plan"
+                    value={editDraft?.subscriptionPlan ?? ''}
+                    onChange={(event) => updateEditDraft('subscriptionPlan', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Monthly Charge"
+                    type="number"
+                    inputProps={{ min: 1, step: '0.01' }}
+                    value={editDraft?.monthlyCharge ?? ''}
+                    onChange={(event) => updateEditDraft('monthlyCharge', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Email"
+                    value={editDraft?.email ?? ''}
+                    onChange={(event) => updateEditDraft('email', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Phone Number"
+                    value={editDraft?.phoneNumber ?? ''}
+                    onChange={(event) => updateEditDraft('phoneNumber', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Alternative Phone"
+                    value={editDraft?.alternativePhoneNumber ?? ''}
+                    onChange={(event) => updateEditDraft('alternativePhoneNumber', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="County"
+                    value={editDraft?.county ?? ''}
+                    onChange={(event) => updateEditDraft('county', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Town"
+                    value={editDraft?.town ?? ''}
+                    onChange={(event) => updateEditDraft('town', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Allowed Users"
+                    type="number"
+                    inputProps={{ min: 1, step: 1 }}
+                    value={editDraft?.allowedUsers ?? ''}
+                    onChange={(event) => updateEditDraft('allowedUsers', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Address"
+                    value={editDraft?.address ?? ''}
+                    onChange={(event) => updateEditDraft('address', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Building"
+                    value={editDraft?.building ?? ''}
+                    onChange={(event) => updateEditDraft('building', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Street"
+                    value={editDraft?.street ?? ''}
+                    onChange={(event) => updateEditDraft('street', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Website"
+                    value={editDraft?.website ?? ''}
+                    onChange={(event) => updateEditDraft('website', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Number Of Bags"
+                    type="number"
+                    inputProps={{ min: 0, step: 1 }}
+                    value={editDraft?.numberOfBags ?? ''}
+                    onChange={(event) => updateEditDraft('numberOfBags', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Payment Details"
+                    value={editDraft?.paymentDetails ?? ''}
+                    onChange={(event) => updateEditDraft('paymentDetails', event.target.value)}
+                  />
+                </Grid>
+              </Grid>
+
+              <Divider />
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="SMS Partner ID"
+                    value={editDraft?.smsPartnerId ?? ''}
+                    onChange={(event) => updateEditDraft('smsPartnerId', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="SMS Shortcode"
+                    value={editDraft?.smsShortCode ?? ''}
+                    onChange={(event) => updateEditDraft('smsShortCode', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="SMS Support Phone"
+                    value={editDraft?.smsSupportPhone ?? ''}
+                    onChange={(event) => updateEditDraft('smsSupportPhone', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="SMS Child ID"
+                    value={editDraft?.smsChildId ?? ''}
+                    onChange={(event) => updateEditDraft('smsChildId', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="New SMS API Key"
+                    type="password"
+                    value={editDraft?.smsApiKey ?? ''}
+                    onChange={(event) => updateEditDraft('smsApiKey', event.target.value)}
+                    helperText="Leave blank to keep the current SMS API key"
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="M-Pesa Shortcode"
+                    value={editDraft?.mpesaShortCode ?? ''}
+                    onChange={(event) => updateEditDraft('mpesaShortCode', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="M-Pesa Name"
+                    value={editDraft?.mpesaName ?? ''}
+                    onChange={(event) => updateEditDraft('mpesaName', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="New M-Pesa API Key"
+                    type="password"
+                    value={editDraft?.mpesaApiKey ?? ''}
+                    onChange={(event) => updateEditDraft('mpesaApiKey', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="New M-Pesa Pass Key"
+                    type="password"
+                    value={editDraft?.mpesaPassKey ?? ''}
+                    onChange={(event) => updateEditDraft('mpesaPassKey', event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="New M-Pesa Secret Key"
+                    type="password"
+                    value={editDraft?.mpesaSecretKey ?? ''}
+                    onChange={(event) => updateEditDraft('mpesaSecretKey', event.target.value)}
+                  />
+                </Grid>
+              </Grid>
+
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                justifyContent="space-between"
+                alignItems={{ xs: 'stretch', sm: 'center' }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Tenant software bills are created monthly. Unpaid platform bills trigger daily alerts
+                  and the tenant is expired automatically on the 10th until payment clears.
+                </Typography>
+                <Button variant="contained" onClick={saveTenantDetails} disabled={detailsSaving}>
+                  {detailsSaving ? 'Saving tenant...' : 'Save tenant details'}
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+        </Grid>
+
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Stack spacing={2}>
@@ -576,7 +1057,7 @@ const TenantDetail = () => {
               </Typography>
               <Typography variant="h5">{tenant.subscription.name}</Typography>
               <Typography variant="body1" color="text.secondary">
-                {currencyFormatter.format(tenant.subscription.priceMonthly)} monthly
+                {currencyFormatter.format(tenant.monthlyCharge)} monthly
               </Typography>
               <Divider />
               <DetailMetric label="Legacy Plan Label" value={tenant.subscription.legacyName} />
@@ -755,6 +1236,10 @@ const TenantDetail = () => {
               ) : (
                 <Typography color="text.secondary">No platform billing records yet.</Typography>
               )}
+              <Typography variant="body2" color="text.secondary">
+                Bill reminders go out daily and intensify three days before expiry. Any unpaid balance on
+                the 10th moves the tenant to `EXPIRED`.
+              </Typography>
             </Stack>
           </Paper>
         </Grid>
@@ -872,6 +1357,37 @@ const TenantDetail = () => {
               />
               <Button variant="contained" onClick={recordManualPayment} disabled={recordingPayment}>
                 {recordingPayment ? 'Recording payment...' : 'Record payment'}
+              </Button>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={2}>
+              <Typography variant="overline" color="primary">
+                SMS Top Up
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Credit SMS units to this tenant instantly using the platform SMS reseller profile.
+                Tenant admins also receive a system alert when the top-up lands.
+              </Typography>
+              <TextField
+                label="SMS Units"
+                type="number"
+                inputProps={{ min: 1, step: 1 }}
+                value={smsTopUpUnitsDraft}
+                onChange={(event) => setSmsTopUpUnitsDraft(event.target.value)}
+                placeholder="500"
+              />
+              <TextField
+                label="Reason"
+                value={smsTopUpReasonDraft}
+                onChange={(event) => setSmsTopUpReasonDraft(event.target.value)}
+                placeholder="Promotional credit, support recovery, manual adjustment"
+              />
+              <Button variant="contained" onClick={topUpTenantSms} disabled={toppingUpSms}>
+                {toppingUpSms ? 'Crediting SMS...' : 'Credit SMS units'}
               </Button>
             </Stack>
           </Paper>
@@ -999,6 +1515,38 @@ const TenantDetail = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      <Dialog open={deleteDialogOpen} onClose={() => !deletingTenant && setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Delete Tenant</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              This permanently deletes the tenant workspace, users, customer records, billing history,
+              notifications, receipts, and payments linked to <strong>{tenant.name}</strong>.
+            </Typography>
+            <TextField
+              autoFocus
+              fullWidth
+              label={`Type "${tenant.name}" to confirm`}
+              value={deleteConfirmationDraft}
+              onChange={(event) => setDeleteConfirmationDraft(event.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deletingTenant}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={deleteTenant}
+            disabled={!deleteConfirmationMatches || deletingTenant}
+          >
+            {deletingTenant ? 'Deleting tenant...' : 'Delete tenant'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };
