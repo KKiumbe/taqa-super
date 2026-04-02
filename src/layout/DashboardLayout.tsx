@@ -53,7 +53,8 @@ const DashboardLayout = () => {
   const isDesktop = useMediaQuery(muiTheme.breakpoints.up('lg'));
   const admin = useAuthStore((state) => state.admin);
   const clearSession = useAuthStore((state) => state.clearSession);
-  const effectiveDrawerWidth = sidebarCollapsed ? collapsedWidth : drawerWidth;
+  const desktopSidebarCollapsed = isDesktop && sidebarCollapsed;
+  const effectiveDrawerWidth = desktopSidebarCollapsed ? collapsedWidth : drawerWidth;
   const drawerOffset = isDesktop ? effectiveDrawerWidth : 0;
 
   const navItems = useMemo(
@@ -151,6 +152,11 @@ const DashboardLayout = () => {
     ? `${admin.firstName[0] ?? ''}${admin.lastName[0] ?? ''}`.trim().toUpperCase()
     : 'PA';
 
+  const handleSignOut = () => {
+    clearSession();
+    navigate('/login', { replace: true });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -181,7 +187,7 @@ const DashboardLayout = () => {
   const drawer = (
     <Box
       sx={{
-        height: '100%',
+        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -190,84 +196,124 @@ const DashboardLayout = () => {
         color: 'common.white',
         borderRight: `1px solid ${alpha(muiTheme.palette.divider, 0.6)}`,
         pb: 2,
+        overflow: 'hidden',
       }}
     >
+      {/* Header — full when expanded, just toggle when collapsed */}
+      {desktopSidebarCollapsed ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2, pb: 1 }}>
+          <Tooltip title="Expand sidebar" placement="right">
+            <IconButton
+              size="small"
+              color="inherit"
+              onClick={() => setSidebarCollapsed(false)}
+              sx={{ border: '1px solid rgba(255,255,255,0.25)' }}
+            >
+              <ChevronRightRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ) : (
         <Box sx={{ px: 3, pt: 3, pb: 2.5 }}>
-        <Chip
-          label="Super Admin"
-          size="small"
-          sx={{
-            mb: 1.5,
-            backgroundColor: 'rgba(255,255,255,0.12)',
-            color: 'common.white',
-          }}
-        />
-        <Typography variant="overline" sx={{ opacity: 0.72 }}>
-          Taqa SaaS
-        </Typography>
-        <Typography variant="h4" sx={{ color: 'common.white', mt: 0.75 }}>
-          Platform Console
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
-          Fast, touch-friendly control surface for platform operations, finance, and support.
-        </Typography>
-      </Box>
+          <Chip
+            label="Super Admin"
+            size="small"
+            sx={{
+              mb: 1.5,
+              backgroundColor: 'rgba(255,255,255,0.12)',
+              color: 'common.white',
+            }}
+          />
+          <Typography variant="overline" sx={{ opacity: 0.72 }}>
+            Taqa SaaS
+          </Typography>
+          <Typography variant="h4" sx={{ color: 'common.white', mt: 0.75 }}>
+            Platform Console
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+            Fast, touch-friendly control surface for platform operations, finance, and support.
+          </Typography>
+        </Box>
+      )}
 
+      {/* User card — avatar only when collapsed */}
       <Box
         sx={{
-          mx: 2.5,
+          mx: desktopSidebarCollapsed ? 'auto' : 2.5,
           mb: 2.25,
-          p: 2,
+          p: desktopSidebarCollapsed ? 0 : 2,
           borderRadius: 4,
-          border: '1px solid rgba(255,255,255,0.12)',
-          backgroundColor: 'rgba(255,255,255,0.08)',
-          backdropFilter: 'blur(16px)',
+          border: desktopSidebarCollapsed ? 'none' : '1px solid rgba(255,255,255,0.12)',
+          backgroundColor: desktopSidebarCollapsed ? 'transparent' : 'rgba(255,255,255,0.08)',
+          backdropFilter: desktopSidebarCollapsed ? 'none' : 'blur(16px)',
+          transition: 'all 200ms ease',
         }}
       >
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Avatar
-            sx={{
-              width: 44,
-              height: 44,
-              bgcolor: 'rgba(255,255,255,0.14)',
-              color: 'common.white',
-              fontWeight: 700,
-            }}
-          >
-            {adminInitials}
-          </Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography fontWeight={700} sx={{ color: 'common.white' }}>
-              {adminName}
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.8, wordBreak: 'break-word' }}>
-              {admin?.email ?? 'No email'}
-            </Typography>
-          </Box>
-        </Stack>
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
-          <Chip
-            size="small"
-            label={admin?.role ?? 'SUPER_ADMIN'}
-            sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
-          />
-          {smsSender ? (
-            <Chip
-              size="small"
-              label={
-                smsSender.balanceStatus === 'AVAILABLE'
-                  ? `SMS ${smsBalanceFormatter.format(smsSender.balance ?? 0)}`
-                  : 'SMS Error'
-              }
-              color={smsSender.balanceStatus === 'AVAILABLE' ? 'success' : 'warning'}
-              variant="outlined"
-              onClick={() => navigate('/sms-resale')}
-              sx={{ color: 'common.white', borderColor: 'rgba(255,255,255,0.25)' }}
-            />
-          ) : null}
-        </Stack>
+        {desktopSidebarCollapsed ? (
+          <Tooltip title={adminName} placement="right">
+            <Avatar
+              sx={{
+                width: 40,
+                height: 40,
+                bgcolor: 'rgba(255,255,255,0.14)',
+                color: 'common.white',
+                fontWeight: 700,
+                cursor: 'default',
+              }}
+            >
+              {adminInitials}
+            </Avatar>
+          </Tooltip>
+        ) : (
+          <>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar
+                sx={{
+                  width: 44,
+                  height: 44,
+                  bgcolor: 'rgba(255,255,255,0.14)',
+                  color: 'common.white',
+                  fontWeight: 700,
+                }}
+              >
+                {adminInitials}
+              </Avatar>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography fontWeight={700} sx={{ color: 'common.white' }}>
+                  {adminName}
+                </Typography>
+                <Typography variant="body2" sx={{ opacity: 0.8, wordBreak: 'break-word' }}>
+                  {admin?.email ?? 'No email'}
+                </Typography>
+              </Box>
+            </Stack>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
+              <Chip
+                size="small"
+                label={admin?.role ?? 'SUPER_ADMIN'}
+                sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
+              />
+              {smsSender ? (
+                <Chip
+                  size="small"
+                  label={
+                    smsSender.balanceStatus === 'AVAILABLE'
+                      ? `SMS ${smsBalanceFormatter.format(smsSender.balance ?? 0)}`
+                      : 'SMS Error'
+                  }
+                  color={smsSender.balanceStatus === 'AVAILABLE' ? 'success' : 'warning'}
+                  variant="outlined"
+                  onClick={() => navigate('/sms-resale')}
+                  sx={{ color: 'common.white', borderColor: 'rgba(255,255,255,0.25)' }}
+                />
+              ) : null}
+            </Stack>
+          </>
+        )}
       </Box>
 
+      {/* Navigate label + collapse toggle (expanded only) */}
+      {!desktopSidebarCollapsed && (
         <Stack
           direction="row"
           alignItems="center"
@@ -278,53 +324,53 @@ const DashboardLayout = () => {
             Navigate
           </Typography>
           {isDesktop ? (
-            <Tooltip title={sidebarCollapsed ? 'Expand sidebar' : 'Minimize sidebar'}>
+            <Tooltip title="Minimize sidebar">
               <IconButton
                 size="small"
                 color="inherit"
-                onClick={() => setSidebarCollapsed((state) => !state)}
+                onClick={() => setSidebarCollapsed(true)}
                 sx={{ border: '1px solid rgba(255,255,255,0.25)' }}
               >
-                {sidebarCollapsed ? (
-                  <ChevronRightRoundedIcon fontSize="small" />
-                ) : (
-                  <ChevronLeftRoundedIcon fontSize="small" />
-                )}
+                <ChevronLeftRoundedIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           ) : null}
         </Stack>
+      )}
 
-        <Box
-          sx={{
-            flexGrow: 1,
-            overflowY: 'auto',
-            px: 1.5,
-            py: 0.5,
-            '&::-webkit-scrollbar': {
-              width: 4,
-            },
-          }}
-        >
-          <List>
-            {navItems.map((item) => {
-              const selected = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+      <Box
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          px: 1.5,
+          py: 0.5,
+          '&::-webkit-scrollbar': {
+            width: 4,
+          },
+        }}
+      >
+        <List>
+          {navItems.map((item) => {
+            const selected = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
 
-              return (
+            return (
+              <Tooltip
+                key={item.to}
+                title={desktopSidebarCollapsed ? item.label : ''}
+                placement="right"
+              >
                 <ListItemButton
-                  key={item.to}
                   selected={selected}
                   onClick={() => {
                     navigate(item.to);
                     setMobileOpen(false);
                   }}
-                  title={sidebarCollapsed ? item.label : undefined}
                   sx={{
                     mb: 0.75,
                     borderRadius: 3.5,
-                    px: sidebarCollapsed ? 1 : 2,
+                    px: desktopSidebarCollapsed ? 1 : 2,
                     py: 0.9,
-                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                    justifyContent: desktopSidebarCollapsed ? 'center' : 'flex-start',
                     transition: 'background-color 200ms ease, padding 200ms ease',
                     '&.Mui-selected': {
                       backgroundColor: 'rgba(255,255,255,0.14)',
@@ -341,78 +387,87 @@ const DashboardLayout = () => {
                   <ListItemIcon
                     sx={{
                       color: 'inherit',
-                      minWidth: 42,
+                      minWidth: desktopSidebarCollapsed ? 'unset' : 42,
                       justifyContent: 'center',
                     }}
                   >
                     {item.icon}
                   </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    secondary={!sidebarCollapsed && selected ? item.description : undefined}
-                    secondaryTypographyProps={{
-                      sx: {
-                        color: 'rgba(255,255,255,0.68)',
-                        mt: 0.25,
-                        fontSize: '0.75rem',
-                      },
-                    }}
-                    primaryTypographyProps={{
-                      sx: {
-                        fontWeight: selected ? 700 : 600,
-                      },
-                    }}
-                    sx={{
-                      flex: 1,
-                      ml: 0.5,
-                      opacity: sidebarCollapsed ? 0 : 1,
-                      visibility: sidebarCollapsed ? 'hidden' : 'visible',
-                      transition: 'opacity 200ms ease, visibility 200ms ease, margin 200ms ease',
-                    }}
-                  />
+                  {!desktopSidebarCollapsed && (
+                    <ListItemText
+                      primary={item.label}
+                      secondary={selected ? item.description : undefined}
+                      secondaryTypographyProps={{
+                        sx: {
+                          color: 'rgba(255,255,255,0.68)',
+                          mt: 0.25,
+                          fontSize: '0.75rem',
+                        },
+                      }}
+                      primaryTypographyProps={{
+                        sx: {
+                          fontWeight: selected ? 700 : 600,
+                        },
+                      }}
+                      sx={{ flex: 1, ml: 0.5 }}
+                    />
+                  )}
                 </ListItemButton>
-              );
-            })}
-          </List>
-        </Box>
+              </Tooltip>
+            );
+          })}
+        </List>
+      </Box>
 
-      <Box sx={{ px: 2.5, pb: 3, mt: 1 }}>
-        <Box
-          sx={{
-            p: 2,
-            borderRadius: 4,
-            border: '1px solid rgba(255,255,255,0.12)',
-            backgroundColor: 'rgba(255,255,255,0.08)',
-          }}
-        >
-          <Typography variant="overline" sx={{ opacity: 0.7 }}>
-            Active View
-          </Typography>
-          <Typography fontWeight={700} sx={{ color: 'common.white', mt: 0.5 }}>
-            {activeNavItem.label}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 0.75, opacity: 0.78 }}>
-            {activeNavItem.description}
-          </Typography>
-          <Button
-            fullWidth
-            color="inherit"
-            variant="outlined"
-            startIcon={<LogoutRoundedIcon />}
-            onClick={() => {
-              clearSession();
-              navigate('/login', { replace: true });
-            }}
+      {/* Bottom active-view + sign out */}
+      {desktopSidebarCollapsed ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pb: 3, mt: 1 }}>
+          <Tooltip title="Sign out" placement="right">
+            <IconButton
+              color="inherit"
+              onClick={handleSignOut}
+              sx={{ border: '1px solid rgba(255,255,255,0.25)' }}
+            >
+              <LogoutRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ) : (
+        <Box sx={{ px: 2.5, pb: 3, mt: 1 }}>
+          <Box
             sx={{
-              mt: 2,
-              borderColor: 'rgba(255,255,255,0.35)',
-              color: 'common.white',
+              p: 2,
+              borderRadius: 4,
+              border: '1px solid rgba(255,255,255,0.12)',
+              backgroundColor: 'rgba(255,255,255,0.08)',
             }}
           >
-            Sign out
-          </Button>
+            <Typography variant="overline" sx={{ opacity: 0.7 }}>
+              Active View
+            </Typography>
+            <Typography fontWeight={700} sx={{ color: 'common.white', mt: 0.5 }}>
+              {activeNavItem.label}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.75, opacity: 0.78 }}>
+              {activeNavItem.description}
+            </Typography>
+            <Button
+              fullWidth
+              color="inherit"
+              variant="outlined"
+              startIcon={<LogoutRoundedIcon />}
+              onClick={handleSignOut}
+              sx={{
+                mt: 2,
+                borderColor: 'rgba(255,255,255,0.35)',
+                color: 'common.white',
+              }}
+            >
+              Sign out
+            </Button>
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 
@@ -425,18 +480,18 @@ const DashboardLayout = () => {
           'linear-gradient(180deg, rgba(255,250,242,0.86) 0%, rgba(244,239,230,0.86) 100%)',
       }}
     >
-        <AppBar
-          position="fixed"
-          color="transparent"
-          elevation={0}
-          sx={{
-            backdropFilter: 'blur(20px)',
-            borderBottom: `1px solid ${alpha(muiTheme.palette.divider, 0.9)}`,
-            width: { lg: `calc(100% - ${drawerOffset}px)` },
-            ml: { lg: `${drawerOffset}px` },
-            transition: 'width 200ms ease, margin 200ms ease',
-          }}
-        >
+      <AppBar
+        position="fixed"
+        color="transparent"
+        elevation={0}
+        sx={{
+          backdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${alpha(muiTheme.palette.divider, 0.9)}`,
+          width: { lg: `calc(100% - ${drawerOffset}px)` },
+          ml: { lg: `${drawerOffset}px` },
+          transition: 'width 200ms ease, margin 200ms ease',
+        }}
+      >
         <Toolbar
           sx={{
             gap: 2,
@@ -516,18 +571,18 @@ const DashboardLayout = () => {
         </Toolbar>
 
         {!isDesktop ? (
-        <Box
-          sx={{
-            px: 2,
-            pb: 1.5,
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-            '&::-webkit-scrollbar': {
-              display: 'none',
-            },
-          }}
-        >
-          <Stack direction="row" spacing={1} sx={{ width: 'max-content', pr: 2 }}>
+          <Box
+            sx={{
+              px: 2,
+              pb: 1.5,
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': {
+                display: 'none',
+              },
+            }}
+          >
+            <Stack direction="row" spacing={1} sx={{ width: 'max-content', pr: 2 }}>
               {navItems.map((item) => {
                 const selected =
                   location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
