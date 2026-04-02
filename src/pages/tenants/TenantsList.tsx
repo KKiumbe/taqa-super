@@ -185,6 +185,11 @@ const TenantsList = () => {
       <PageHeader
         title="Tenants"
         subtitle="Cross-tenant list with plan, status, and utilization signals. Use this view to move from platform-wide health into a single tenant quickly."
+        action={
+          <Button variant="contained" onClick={() => navigate('/tenants/new')}>
+            Add Tenant
+          </Button>
+        }
       />
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

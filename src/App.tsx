@@ -9,6 +9,7 @@ import Usage from './pages/usage/Usage';
 import Operations from './pages/operations/Operations';
 import Support from './pages/support/Support';
 import TenantsList from './pages/tenants/TenantsList';
+import CreateTenant from './pages/tenants/CreateTenant';
 import TenantDetail from './pages/tenants/TenantDetail';
 import { setupApiInterceptors } from './services/api';
 import { useAuthStore } from './store/authStore';
@@ -34,6 +35,7 @@ const App = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tenants" element={<TenantsList />} />
+          <Route path="/tenants/new" element={<CreateTenant />} />
           <Route path="/tenants/:id" element={<TenantDetail />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/usage" element={<Usage />} />
