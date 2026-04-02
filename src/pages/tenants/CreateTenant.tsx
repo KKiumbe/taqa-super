@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Box,
   Button,
   Grid,
   Paper,
@@ -12,6 +13,11 @@ import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import { api } from '../../services/api';
+
+const toNullable = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
 
 const initialFormData = {
   firstName: '',
@@ -35,16 +41,6 @@ const initialFormData = {
   street: '',
   website: '',
   paymentDetails: '',
-  smsPartnerId: '',
-  smsApiKey: '',
-  smsShortCode: '',
-  smsSupportPhone: '',
-  smsChildId: '',
-  mpesaShortCode: '',
-  mpesaName: '',
-  mpesaApiKey: '',
-  mpesaPassKey: '',
-  mpesaSecretKey: '',
 };
 
 const CreateTenant = () => {
@@ -53,12 +49,6 @@ const CreateTenant = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const requiredConfigHelper = useMemo(
-    () =>
-      'This uses the existing signup contract so each tenant starts with admin access plus SMS and M-Pesa config in one step.',
-    []
-  );
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -75,12 +65,7 @@ const CreateTenant = () => {
     setSuccess(null);
 
     try {
-      const response = await api.post<{
-        tenant: {
-          id: number;
-          name: string;
-        };
-      }>('/tenants', {
+      const payload: Record<string, unknown> = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -102,21 +87,14 @@ const CreateTenant = () => {
         street: formData.street,
         website: formData.website,
         paymentDetails: formData.paymentDetails,
-        smsConfig: {
-          partnerId: formData.smsPartnerId,
-          apiKey: formData.smsApiKey,
-          shortCode: formData.smsShortCode,
-          customerSupportPhoneNumber: formData.smsSupportPhone,
-          childId: formData.smsChildId,
-        },
-        mpesaConfig: {
-          shortCode: formData.mpesaShortCode,
-          name: formData.mpesaName,
-          apiKey: formData.mpesaApiKey,
-          passKey: formData.mpesaPassKey,
-          secretKey: formData.mpesaSecretKey,
-        },
-      });
+      };
+
+      const response = await api.post<{
+        tenant: {
+          id: number;
+          name: string;
+        };
+      }>('/tenants', payload);
 
       setSuccess(`Created ${response.data.tenant.name}. Redirecting to tenant detail...`);
       setTimeout(() => navigate(`/tenants/${response.data.tenant.id}`), 700);
@@ -131,7 +109,7 @@ const CreateTenant = () => {
     <Stack spacing={3}>
       <PageHeader
         title="Add Tenant"
-        subtitle="Create a tenant together with the first admin user, software billing settings, SMS config, and M-Pesa config."
+        subtitle="Create a tenant together with the first admin user and billing settings; SMS and M-Pesa credentials are configured separately."
         action={
           <Button
             variant="outlined"
@@ -141,14 +119,23 @@ const CreateTenant = () => {
             Back To Tenants
           </Button>
         }
+        eyebrow="Onboarding"
       />
 
-      <Paper sx={{ p: 3 }}>
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-        {success ? <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert> : null}
+      {error ? <Alert severity="error">{error}</Alert> : null}
+      {success ? <Alert severity="success">{success}</Alert> : null}
 
-        <Stack component="form" spacing={2.5} onSubmit={handleSubmit}>
-          <Typography variant="h6">Admin User</Typography>
+      <Stack component="form" spacing={2.5} onSubmit={handleSubmit}>
+        <Paper sx={{ p: { xs: 2.25, md: 3 } }}>
+          <Stack spacing={0.75} sx={{ mb: 2.5 }}>
+            <Typography variant="overline" color="primary">
+              Step 1
+            </Typography>
+            <Typography variant="h5">Admin User</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Create the first account that will manage the tenant immediately after onboarding.
+            </Typography>
+          </Stack>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <TextField fullWidth required label="First Name" name="firstName" value={formData.firstName} onChange={handleChange} />
@@ -172,11 +159,31 @@ const CreateTenant = () => {
               <TextField fullWidth label="Gender" name="gender" value={formData.gender} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth required type="password" label="Password" name="password" value={formData.password} onChange={handleChange} helperText="At least 6 characters" />
+              <TextField
+                fullWidth
+                required
+                type="password"
+                label="Password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                helperText="At least 6 characters"
+              />
             </Grid>
           </Grid>
+        </Paper>
 
-          <Typography variant="h6">Tenant Profile</Typography>
+        <Paper sx={{ p: { xs: 2.25, md: 3 } }}>
+          <Stack spacing={0.75} sx={{ mb: 2.5 }}>
+            <Typography variant="overline" color="primary">
+              Step 2
+            </Typography>
+            <Typography variant="h5">Tenant Profile</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Capture the commercial plan, contact channels, and address details that the support and
+              billing teams rely on later.
+            </Typography>
+          </Stack>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <TextField fullWidth required label="Tenant Name" name="tenantName" value={formData.tenantName} onChange={handleChange} />
@@ -185,10 +192,29 @@ const CreateTenant = () => {
               <TextField fullWidth required label="Subscription Plan" name="subscriptionPlan" value={formData.subscriptionPlan} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={4}>
-              <TextField fullWidth required type="number" label="Monthly Charge" name="monthlyCharge" value={formData.monthlyCharge} onChange={handleChange} inputProps={{ min: 1, step: '0.01' }} />
+              <TextField
+                fullWidth
+                required
+                type="number"
+                label="Monthly Charge"
+                name="monthlyCharge"
+                value={formData.monthlyCharge}
+                onChange={handleChange}
+                inputProps={{ min: 1, step: '0.01' }}
+                helperText="Tenant-facing monthly price"
+              />
             </Grid>
             <Grid item xs={12} md={4}>
-              <TextField fullWidth required type="number" label="Allowed Users" name="allowedUsers" value={formData.allowedUsers} onChange={handleChange} inputProps={{ min: 1, step: 1 }} />
+              <TextField
+                fullWidth
+                required
+                type="number"
+                label="Allowed Users"
+                name="allowedUsers"
+                value={formData.allowedUsers}
+                onChange={handleChange}
+                inputProps={{ min: 1, step: 1 }}
+              />
             </Grid>
             <Grid item xs={12} md={4}>
               <TextField fullWidth type="number" label="Number Of Bags" name="numberOfBags" value={formData.numberOfBags} onChange={handleChange} inputProps={{ min: 0, step: 1 }} />
@@ -215,68 +241,44 @@ const CreateTenant = () => {
               <TextField fullWidth label="Street" name="street" value={formData.street} onChange={handleChange} />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth label="Payment Details" name="paymentDetails" value={formData.paymentDetails} onChange={handleChange} />
+              <TextField fullWidth label="Payment Details" name="paymentDetails" value={formData.paymentDetails} onChange={handleChange} helperText="Optional payment instructions shown to your internal team." />
             </Grid>
           </Grid>
+        </Paper>
 
-          <Stack spacing={0.5}>
-            <Typography variant="h6">SMS Configuration</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {requiredConfigHelper}
-            </Typography>
+        <Paper
+          sx={{
+            p: 2,
+            position: 'sticky',
+            bottom: { xs: 10, md: 18 },
+            zIndex: 2,
+            backdropFilter: 'blur(18px)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,250,242,0.96) 100%)',
+          }}
+        >
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1.5}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', md: 'center' }}
+          >
+            <Box>
+              <Typography variant="subtitle2">Ready to onboard</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Review the required sections, then create the tenant and add SMS and M-Pesa credentials later via the Integrations screens.
+              </Typography>
+            </Box>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ width: { xs: '100%', md: 'auto' } }}>
+              <Button type="submit" variant="contained" disabled={submitting}>
+                {submitting ? 'Creating tenant...' : 'Create Tenant'}
+              </Button>
+              <Button variant="outlined" onClick={() => navigate('/tenants')}>
+                Cancel
+              </Button>
+            </Stack>
           </Stack>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="Partner ID" name="smsPartnerId" value={formData.smsPartnerId} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="API Key" name="smsApiKey" value={formData.smsApiKey} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="Short Code" name="smsShortCode" value={formData.smsShortCode} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="Customer Support Phone" name="smsSupportPhone" value={formData.smsSupportPhone} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField fullWidth label="Child ID" name="smsChildId" value={formData.smsChildId} onChange={handleChange} />
-            </Grid>
-          </Grid>
-
-          <Stack spacing={0.5}>
-            <Typography variant="h6">M-Pesa Configuration</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Short code and display name are required. Credentials can be supplied immediately if available.
-            </Typography>
-          </Stack>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="Short Code" name="mpesaShortCode" value={formData.mpesaShortCode} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth required label="Display Name" name="mpesaName" value={formData.mpesaName} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth label="API Key" name="mpesaApiKey" value={formData.mpesaApiKey} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth label="Pass Key" name="mpesaPassKey" value={formData.mpesaPassKey} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth label="Secret Key" name="mpesaSecretKey" value={formData.mpesaSecretKey} onChange={handleChange} />
-            </Grid>
-          </Grid>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <Button type="submit" variant="contained" disabled={submitting}>
-              {submitting ? 'Creating tenant...' : 'Create Tenant'}
-            </Button>
-            <Button variant="outlined" onClick={() => navigate('/tenants')}>
-              Cancel
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
+        </Paper>
+      </Stack>
     </Stack>
   );
 };
