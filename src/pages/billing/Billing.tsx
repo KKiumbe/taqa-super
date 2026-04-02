@@ -4,9 +4,17 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
   MenuItem,
   Paper,
+  Select,
+  SelectChangeEvent,
   Stack,
   TextField,
   Typography,
@@ -22,26 +30,52 @@ import { api } from '../../services/api';
 import {
   BillingRecordSource,
   InvoiceStatus,
+  ModeOfPayment,
   PaginationMeta,
   PlatformInvoice,
   PlatformPayment,
   RevenueSummaryPayload,
+  TenantSummary,
 } from '../../types';
 import { currencyFormatter, formatDate, formatDateTime } from '../../lib/format';
 
 const invoiceStatuses: Array<'ALL' | InvoiceStatus> = ['ALL', 'UNPAID', 'PPAID', 'PAID', 'CANCELLED'];
 const billingSources: Array<'ALL' | BillingRecordSource> = ['ALL', 'PLATFORM', 'LEGACY_CUSTOMER'];
+const paymentModes: ModeOfPayment[] = [
+  'MPESA',
+  'BANK_TRANSFER',
+  'CASH',
+  'CREDIT_CARD',
+  'DEBIT_CARD',
+];
 const sourceLabel: Record<BillingRecordSource, string> = {
   PLATFORM: 'Platform',
   LEGACY_CUSTOMER: 'Migrated',
 };
 
+const getCurrentMonthInput = () => new Date().toISOString().slice(0, 7);
+
+const getCurrentDateTimeInput = () => {
+  const now = new Date();
+  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localTime.toISOString().slice(0, 16);
+};
+
+const toAmountInput = (value: number) =>
+  value.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  });
+
 const Billing = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const [summary, setSummary] = useState<RevenueSummaryPayload | null>(null);
+  const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [invoices, setInvoices] = useState<PlatformInvoice[]>([]);
   const [payments, setPayments] = useState<PlatformPayment[]>([]);
+  const [paymentTenantInvoices, setPaymentTenantInvoices] = useState<PlatformInvoice[]>([]);
   const [invoicePagination, setInvoicePagination] = useState<PaginationMeta | null>(null);
   const [paymentPagination, setPaymentPagination] = useState<PaginationMeta | null>(null);
   const [invoicePaginationModel, setInvoicePaginationModel] = useState<GridPaginationModel>({
@@ -56,7 +90,24 @@ const Billing = () => {
   const [billingSource, setBillingSource] = useState<'ALL' | BillingRecordSource>('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tenantOptionsLoading, setTenantOptionsLoading] = useState(false);
+  const [paymentInvoicesLoading, setPaymentInvoicesLoading] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [selectedInvoiceTenantId, setSelectedInvoiceTenantId] = useState('');
+  const [selectedPaymentTenantId, setSelectedPaymentTenantId] = useState('');
+  const [selectedPaymentInvoiceId, setSelectedPaymentInvoiceId] = useState('');
+  const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
+  const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
+  const [paymentAmountDraft, setPaymentAmountDraft] = useState('');
+  const [paymentModeDraft, setPaymentModeDraft] = useState<ModeOfPayment>('MPESA');
+  const [paymentReferenceDraft, setPaymentReferenceDraft] = useState('');
+  const [paidAtDraft, setPaidAtDraft] = useState(getCurrentDateTimeInput());
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +171,228 @@ const Billing = () => {
     invoiceStatus,
     billingSource,
     search,
+    refreshKey,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTenantOptions = async () => {
+      setTenantOptionsLoading(true);
+
+      try {
+        const response = await api.get<{ tenants: TenantSummary[] }>('/tenants', {
+          params: {
+            page: 1,
+            limit: 250,
+          },
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextTenants = [...response.data.tenants].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        );
+
+        setTenants(nextTenants);
+        setSelectedInvoiceTenantId((current) => current || String(nextTenants[0]?.id ?? ''));
+        setSelectedPaymentTenantId((current) => current || String(nextTenants[0]?.id ?? ''));
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message ?? 'Failed to load tenant options');
+        }
+      } finally {
+        if (!cancelled) {
+          setTenantOptionsLoading(false);
+        }
+      }
+    };
+
+    loadTenantOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!paymentDialogOpen || !selectedPaymentTenantId) {
+      setPaymentTenantInvoices([]);
+      setSelectedPaymentInvoiceId('');
+      return;
+    }
+
+    const loadPaymentInvoices = async () => {
+      setPaymentInvoicesLoading(true);
+
+      try {
+        const response = await api.get<{ invoices: PlatformInvoice[] }>('/billing/invoices', {
+          params: {
+            tenantId: selectedPaymentTenantId,
+            limit: 100,
+          },
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextInvoices = response.data.invoices.filter(
+          (invoice) => invoice.status === 'UNPAID' || invoice.status === 'PPAID'
+        );
+
+        setPaymentTenantInvoices(nextInvoices);
+        setSelectedPaymentInvoiceId((current) =>
+          current && nextInvoices.some((invoice) => invoice.id === current) ? current : ''
+        );
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message ?? 'Failed to load tenant invoices');
+        }
+      } finally {
+        if (!cancelled) {
+          setPaymentInvoicesLoading(false);
+        }
+      }
+    };
+
+    loadPaymentInvoices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentDialogOpen, selectedPaymentTenantId]);
+
+  const selectedInvoiceTenant = useMemo(
+    () => tenants.find((tenant) => String(tenant.id) === selectedInvoiceTenantId) ?? null,
+    [selectedInvoiceTenantId, tenants]
+  );
+
+  const selectedPaymentTenant = useMemo(
+    () => tenants.find((tenant) => String(tenant.id) === selectedPaymentTenantId) ?? null,
+    [selectedPaymentTenantId, tenants]
+  );
+
+  const selectedPaymentInvoice = useMemo(
+    () => paymentTenantInvoices.find((invoice) => invoice.id === selectedPaymentInvoiceId) ?? null,
+    [selectedPaymentInvoiceId, paymentTenantInvoices]
+  );
+
+  const resetInvoiceDialog = () => {
+    setInvoiceDialogOpen(false);
+    setSelectedInvoiceTenantId((current) => current || String(tenants[0]?.id ?? ''));
+    setInvoiceAmountDraft('');
+    setInvoicePeriodDraft(getCurrentMonthInput());
+  };
+
+  const resetPaymentDialog = () => {
+    setPaymentDialogOpen(false);
+    setSelectedPaymentTenantId((current) => current || String(tenants[0]?.id ?? ''));
+    setSelectedPaymentInvoiceId('');
+    setPaymentAmountDraft('');
+    setPaymentModeDraft('MPESA');
+    setPaymentReferenceDraft('');
+    setPaidAtDraft(getCurrentDateTimeInput());
+  };
+
+  const createManualInvoice = async () => {
+    const tenantId = Number.parseInt(selectedInvoiceTenantId, 10);
+    const invoiceAmount = Number.parseFloat(invoiceAmountDraft);
+
+    if (!Number.isInteger(tenantId) || tenantId <= 0) {
+      setError('Choose a tenant before creating an invoice.');
+      return;
+    }
+
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+      setError('Enter a valid invoice amount greater than zero.');
+      return;
+    }
+
+    if (!invoicePeriodDraft) {
+      setError('Choose the invoice month before creating the invoice.');
+      return;
+    }
+
+    setCreatingInvoice(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ invoice: PlatformInvoice }>('/billing/invoices', {
+        tenantId,
+        invoiceAmount,
+        invoicePeriod: invoicePeriodDraft,
+      });
+
+      setRefreshKey((current) => current + 1);
+      setSuccess(
+        `Created invoice ${response.data.invoice.invoiceNumber} for ${response.data.invoice.tenantName}.`
+      );
+      resetInvoiceDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to create tenant invoice');
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
+
+  const recordManualPayment = async () => {
+    const tenantId = Number.parseInt(selectedPaymentTenantId, 10);
+    const amount = Number.parseFloat(paymentAmountDraft);
+
+    if (!Number.isInteger(tenantId) || tenantId <= 0) {
+      setError('Choose a tenant before recording a payment.');
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a valid payment amount greater than zero.');
+      return;
+    }
+
+    if (!paidAtDraft) {
+      setError('Choose the payment datetime before recording the payment.');
+      return;
+    }
+
+    setRecordingPayment(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{
+        payment: PlatformPayment;
+        meta?: {
+          tenantReactivated?: boolean;
+        };
+      }>('/billing/payments', {
+        tenantId,
+        amount,
+        modeOfPayment: paymentModeDraft,
+        transactionId: paymentReferenceDraft.trim() || undefined,
+        preferredInvoiceId: selectedPaymentInvoiceId || undefined,
+        paidAt: new Date(paidAtDraft).toISOString(),
+      });
+
+      setRefreshKey((current) => current + 1);
+      if (response.data.meta?.tenantReactivated) {
+        setSuccess(`Payment recorded and ${response.data.payment.tenantName} was reactivated.`);
+      } else {
+        const linkedInvoices = response.data.payment.linkedInvoiceNumbers.join(', ');
+        setSuccess(`Payment recorded for ${response.data.payment.tenantName} against ${linkedInvoices}.`);
+      }
+      resetPaymentDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to record tenant payment');
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
 
   const invoiceColumns = useMemo<GridColDef<PlatformInvoice>[]>(
     () => [
@@ -317,7 +589,16 @@ const Billing = () => {
         title="Billing"
         subtitle="Revenue summary, tenant invoices, and payment history across the platform."
         action={
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+          <Stack spacing={1.5}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="flex-end">
+              <Button variant="contained" onClick={() => setInvoiceDialogOpen(true)}>
+                Manual Invoice
+              </Button>
+              <Button variant="outlined" onClick={() => setPaymentDialogOpen(true)}>
+                Manual Payment
+              </Button>
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
             <TextField
               label="Search"
               value={search}
@@ -362,11 +643,13 @@ const Billing = () => {
                 </MenuItem>
               ))}
             </TextField>
+            </Stack>
           </Stack>
         }
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
+      {success ? <Alert severity="success">{success}</Alert> : null}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} xl={3}>
@@ -496,6 +779,184 @@ const Billing = () => {
           />
         </Box>
       </Paper>
+
+      <Dialog open={invoiceDialogOpen} onClose={creatingInvoice ? undefined : resetInvoiceDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Manual Invoice</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Create a platform invoice directly from the billing workspace.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel id="billing-invoice-tenant-label">Tenant</InputLabel>
+              <Select
+                labelId="billing-invoice-tenant-label"
+                label="Tenant"
+                value={selectedInvoiceTenantId}
+                onChange={(event) => setSelectedInvoiceTenantId(event.target.value)}
+                disabled={tenantOptionsLoading}
+              >
+                {tenants.map((tenant) => (
+                  <MenuItem key={tenant.id} value={String(tenant.id)}>
+                    {tenant.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {selectedInvoiceTenant ? (
+              <Typography variant="body2" color="text.secondary">
+                {selectedInvoiceTenant.plan.name} · {currencyFormatter.format(selectedInvoiceTenant.plan.priceMonthly)} monthly
+              </Typography>
+            ) : null}
+            <TextField
+              label="Invoice Amount"
+              type="number"
+              inputProps={{ min: 1, step: '0.01' }}
+              value={invoiceAmountDraft}
+              onChange={(event) => setInvoiceAmountDraft(event.target.value)}
+              placeholder="0.00"
+            />
+            <TextField
+              label="Invoice Month"
+              type="month"
+              value={invoicePeriodDraft}
+              onChange={(event) => setInvoicePeriodDraft(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetInvoiceDialog} disabled={creatingInvoice}>
+            Cancel
+          </Button>
+          <Button onClick={createManualInvoice} variant="contained" disabled={creatingInvoice || tenantOptionsLoading}>
+            {creatingInvoice ? 'Creating invoice...' : 'Create invoice'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={paymentDialogOpen} onClose={recordingPayment ? undefined : resetPaymentDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Manual Payment</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Record a tenant payment without leaving the billing screen.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel id="billing-payment-tenant-label">Tenant</InputLabel>
+              <Select
+                labelId="billing-payment-tenant-label"
+                label="Tenant"
+                value={selectedPaymentTenantId}
+                onChange={(event) => {
+                  setSelectedPaymentTenantId(event.target.value);
+                  setSelectedPaymentInvoiceId('');
+                  setPaymentAmountDraft('');
+                }}
+                disabled={tenantOptionsLoading}
+              >
+                {tenants.map((tenant) => (
+                  <MenuItem key={tenant.id} value={String(tenant.id)}>
+                    {tenant.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {selectedPaymentTenant ? (
+              <Typography variant="body2" color="text.secondary">
+                {selectedPaymentTenant.status} tenant · {selectedPaymentTenant.plan.name}
+              </Typography>
+            ) : null}
+            <FormControl fullWidth>
+              <InputLabel id="billing-payment-invoice-label">Target Invoice</InputLabel>
+              <Select
+                labelId="billing-payment-invoice-label"
+                label="Target Invoice"
+                value={selectedPaymentInvoiceId}
+                onChange={(event) => {
+                  const nextInvoiceId = event.target.value;
+                  setSelectedPaymentInvoiceId(nextInvoiceId);
+
+                  if (!paymentAmountDraft) {
+                    const nextInvoice = paymentTenantInvoices.find((invoice) => invoice.id === nextInvoiceId);
+                    if (nextInvoice) {
+                      setPaymentAmountDraft(toAmountInput(nextInvoice.balance));
+                    }
+                  }
+                }}
+                disabled={paymentInvoicesLoading || !selectedPaymentTenantId}
+              >
+                <MenuItem value="">Auto allocate oldest open invoices</MenuItem>
+                {paymentTenantInvoices.map((invoice) => (
+                  <MenuItem key={invoice.id} value={invoice.id}>
+                    {invoice.invoiceNumber} · {currencyFormatter.format(invoice.balance)} due
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {selectedPaymentInvoice ? (
+              <Typography variant="body2" color="text.secondary">
+                Selected balance: {currencyFormatter.format(selectedPaymentInvoice.balance)}
+              </Typography>
+            ) : null}
+            {!paymentInvoicesLoading && selectedPaymentTenantId && paymentTenantInvoices.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No open invoices were found for this tenant.
+              </Typography>
+            ) : null}
+            <TextField
+              label="Payment Amount"
+              type="number"
+              inputProps={{ min: 1, step: '0.01' }}
+              value={paymentAmountDraft}
+              onChange={(event) => setPaymentAmountDraft(event.target.value)}
+              placeholder="0.00"
+            />
+            <FormControl fullWidth>
+              <InputLabel id="billing-payment-mode-label">Mode of Payment</InputLabel>
+              <Select
+                labelId="billing-payment-mode-label"
+                label="Mode of Payment"
+                value={paymentModeDraft}
+                onChange={(event: SelectChangeEvent<ModeOfPayment>) =>
+                  setPaymentModeDraft(event.target.value as ModeOfPayment)
+                }
+              >
+                {paymentModes.map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode.replace('_', ' ')}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Reference"
+              value={paymentReferenceDraft}
+              onChange={(event) => setPaymentReferenceDraft(event.target.value)}
+              placeholder="Transaction code, bank ref, or receipt ref"
+            />
+            <TextField
+              label="Paid At"
+              type="datetime-local"
+              value={paidAtDraft}
+              onChange={(event) => setPaidAtDraft(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetPaymentDialog} disabled={recordingPayment}>
+            Cancel
+          </Button>
+          <Button
+            onClick={recordManualPayment}
+            variant="contained"
+            disabled={recordingPayment || tenantOptionsLoading || paymentInvoicesLoading}
+          >
+            {recordingPayment ? 'Recording payment...' : 'Record payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 };
