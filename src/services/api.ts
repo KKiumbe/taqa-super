@@ -33,6 +33,8 @@ export const setupApiInterceptors = (): void => {
     const token = useAuthStore.getState().token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (config.headers?.Authorization) {
+      delete config.headers.Authorization;
     }
 
     return config;
@@ -52,3 +54,5 @@ export const setupApiInterceptors = (): void => {
     }
   );
 };
+
+setupApiInterceptors();

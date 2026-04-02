@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import Login from './pages/auth/Login';
 import ProtectedRoute from './layout/ProtectedRoute';
@@ -11,15 +10,10 @@ import Support from './pages/support/Support';
 import TenantsList from './pages/tenants/TenantsList';
 import CreateTenant from './pages/tenants/CreateTenant';
 import TenantDetail from './pages/tenants/TenantDetail';
-import { setupApiInterceptors } from './services/api';
 import { useAuthStore } from './store/authStore';
 
 const App = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
-  useEffect(() => {
-    setupApiInterceptors();
-  }, []);
 
   return (
     <BrowserRouter>
