@@ -11,6 +11,7 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import { LineChart } from '@mui/x-charts/LineChart';
@@ -19,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import { LoginActivityPayload, PaginationMeta, TenantStatus, UsageTenant } from '../../types';
 import { formatDateTime, formatRiskFlag } from '../../lib/format';
@@ -26,6 +28,7 @@ import { formatDateTime, formatRiskFlag } from '../../lib/format';
 const Usage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [rows, setRows] = useState<UsageTenant[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [logins, setLogins] = useState<LoginActivityPayload | null>(null);
@@ -195,30 +198,42 @@ const Usage = () => {
     [navigate]
   );
 
+  const columnVisibilityModel = useMemo(
+    () => ({
+      actionsLast30Days: !isCompact,
+      activeUsersLast30Days: !isCompact,
+      lastPaymentAt: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
         title="Usage"
         subtitle="Engagement scoring, login activity, and risk flags across the tenant base."
+        eyebrow="Engagement View"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} lg={4} xl={3}>
-          <KpiCard label="Total Results" value={rowCount} helper="Tenants matching the current query" />
+          <KpiCard label="Total Results" value={rowCount} helper="Tenants matching the current query" accent="primary" />
         </Grid>
         <Grid item xs={12} sm={6} lg={4} xl={3}>
-          <KpiCard label="Risky On Page" value={riskyTenantCount} helper="Visible tenants with churn flags" />
+          <KpiCard label="Risky On Page" value={riskyTenantCount} helper="Visible tenants with churn flags" accent="warning" />
         </Grid>
         <Grid item xs={12} sm={6} lg={4} xl={3}>
-          <KpiCard label="Average Engagement" value={averageEngagement} helper="Average score on visible rows" />
+          <KpiCard label="Average Engagement" value={averageEngagement} helper="Average score on visible rows" accent="success" />
         </Grid>
         <Grid item xs={12} sm={6} lg={6} xl={3}>
           <KpiCard
             label="Logins (30d)"
             value={logins?.totals.loginCount ?? '...'}
             helper="All LOGIN events in the last 30 days"
+            accent="info"
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={6} xl={3}>
@@ -226,6 +241,7 @@ const Usage = () => {
             label="Active Users (30d)"
             value={logins?.totals.activeUsers ?? '...'}
             helper="Distinct users across login events"
+            accent="secondary"
           />
         </Grid>
       </Grid>
@@ -233,7 +249,7 @@ const Usage = () => {
       {logins ? (
         <Grid container spacing={2}>
           <Grid item xs={12} lg={8}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: { xs: 2.25, md: 3 }, minHeight: '100%' }}>
               <Typography variant="overline" color="primary">
                 Login Trend
               </Typography>
@@ -241,7 +257,7 @@ const Usage = () => {
                 Daily login count and active tenants over the last 30 days.
               </Typography>
               <LineChart
-                height={300}
+                height={isCompact ? 240 : 300}
                 xAxis={[{ scaleType: 'point', data: logins.trend.map((item) => item.label) }]}
                 series={[
                   {
@@ -255,12 +271,12 @@ const Usage = () => {
                     color: theme.palette.secondary.main,
                   },
                 ]}
-                margin={{ left: 56, right: 24, top: 24, bottom: 24 }}
+                margin={{ left: isCompact ? 36 : 56, right: 12, top: 24, bottom: 24 }}
               />
             </Paper>
           </Grid>
           <Grid item xs={12} lg={4}>
-            <Paper sx={{ p: 3, height: '100%' }}>
+            <Paper sx={{ p: { xs: 2.25, md: 3 }, height: '100%' }}>
               <Typography variant="overline" color="primary">
                 Top Login Tenants
               </Typography>
@@ -325,6 +341,7 @@ const Usage = () => {
             rows={rows}
             getRowId={(row) => row.tenantId}
             columns={columns}
+            columnVisibilityModel={columnVisibilityModel}
             loading={loading}
             rowCount={rowCount}
             paginationMode="server"
@@ -332,6 +349,9 @@ const Usage = () => {
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>

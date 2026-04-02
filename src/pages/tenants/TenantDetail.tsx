@@ -29,10 +29,11 @@ import {
   ModeOfPayment,
   PlatformInvoice,
   PlatformPayment,
+  PlatformReceipt,
   TenantDetail as TenantDetailType,
   TenantStatus,
 } from '../../types';
-import { currencyFormatter, formatDateTime, formatRiskFlag } from '../../lib/format';
+import { currencyFormatter, formatDate, formatDateTime, formatRiskFlag } from '../../lib/format';
 
 const paymentModes: ModeOfPayment[] = [
   'MPESA',
@@ -97,6 +98,11 @@ type TenantEditDraft = {
   mpesaSecretKey: string;
 };
 
+const toNullable = (value: string): string | null => {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 const buildTenantEditDraft = (tenant: TenantDetailType): TenantEditDraft => ({
   name: tenant.name,
   subscriptionPlan: tenant.subscriptionPlan,
@@ -142,6 +148,8 @@ const TenantDetail = () => {
   const [tenant, setTenant] = useState<TenantDetailType | null>(null);
   const [editDraft, setEditDraft] = useState<TenantEditDraft | null>(null);
   const [billingInvoices, setBillingInvoices] = useState<PlatformInvoice[]>([]);
+  const [tenantPayments, setTenantPayments] = useState<PlatformPayment[]>([]);
+  const [tenantReceipts, setTenantReceipts] = useState<PlatformReceipt[]>([]);
   const [statusDraft, setStatusDraft] = useState<TenantStatus>('ACTIVE');
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
   const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
@@ -169,8 +177,12 @@ const TenantDetail = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmationDraft, setDeleteConfirmationDraft] = useState('');
   const [deletingTenant, setDeletingTenant] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeError, setFinanceError] = useState<string | null>(null);
+  const [financeRefreshKey, setFinanceRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,7 +193,7 @@ const TenantDetail = () => {
     }
 
     const loadWorkspace = async () => {
-      setLoading(true);
+    setLoading(true);
       setBillingLoading(true);
       setError(null);
 
@@ -234,6 +246,60 @@ const TenantDetail = () => {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!tenant?.id) {
+      setTenantPayments([]);
+      setTenantReceipts([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFinancials = async () => {
+      setFinanceLoading(true);
+      setFinanceError(null);
+
+      try {
+        const [paymentsResponse, receiptsResponse] = await Promise.all([
+          api.get<{ payments: PlatformPayment[] }>('/billing/payments', {
+            params: {
+              page: 1,
+              limit: 6,
+              tenantId: tenant.id,
+            },
+          }),
+          api.get<{ receipts: PlatformReceipt[] }>('/receipts/tenant', {
+            params: {
+              tenantId: tenant.id,
+              limit: 6,
+            },
+          }),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setTenantPayments(paymentsResponse.data.payments);
+        setTenantReceipts(receiptsResponse.data.receipts);
+      } catch (err: any) {
+        if (!cancelled) {
+          setFinanceError(err?.response?.data?.message ?? 'Failed to load financial data');
+        }
+      } finally {
+        if (!cancelled) {
+          setFinanceLoading(false);
+        }
+      }
+    };
+
+    loadFinancials();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant?.id, financeRefreshKey]);
+
   const refreshTenantWorkspace = async (tenantId: number): Promise<void> => {
     const [tenantResponse, invoicesResponse] = await Promise.all([
       api.get<{ tenant: TenantDetailType }>(`/tenants/${tenantId}`),
@@ -255,6 +321,7 @@ const TenantDetail = () => {
       tenantResponse.data.tenant.alternativePhoneNumber ||
       ''
     );
+    setFinanceRefreshKey((key) => key + 1);
   };
 
   const statusDirty = tenant ? tenant.status !== statusDraft : false;
@@ -272,6 +339,9 @@ const TenantDetail = () => {
       .join(', ');
   }, [tenant]);
 
+  const smsConfigStatus = tenant?.smsConfig?.shortCode ? 'Configured' : 'Missing';
+  const mpesaConfigStatus = tenant?.mpesaConfig?.shortCode ? 'Configured' : 'Missing';
+
   const openInvoices = useMemo(
     () => billingInvoices.filter((invoice) => invoice.status === 'UNPAID' || invoice.status === 'PPAID'),
     [billingInvoices]
@@ -288,6 +358,10 @@ const TenantDetail = () => {
     () => openInvoices.find((invoice) => invoice.id === paymentInvoiceIdDraft) ?? null,
     [openInvoices, paymentInvoiceIdDraft]
   );
+
+  const invoicePreview = useMemo(() => recentInvoices.slice(0, 4), [recentInvoices]);
+  const paymentPreview = useMemo(() => tenantPayments.slice(0, 4), [tenantPayments]);
+  const receiptPreview = useMemo(() => tenantReceipts.slice(0, 4), [tenantReceipts]);
 
   const smsRecipientCount = useMemo(
     () =>
@@ -351,12 +425,32 @@ const TenantDetail = () => {
     setError(null);
     setSuccess(null);
 
+    const mpesaShortCode = editDraft.mpesaShortCode.trim();
+    const mpesaName = editDraft.mpesaName.trim();
+
+    if ((mpesaShortCode && !mpesaName) || (!mpesaShortCode && mpesaName)) {
+      setError('M-Pesa short code and display name are both required to create or update the config.');
+      setDetailsSaving(false);
+      return;
+    }
+
+    const mpesaPayload =
+      mpesaShortCode && mpesaName
+        ? {
+            shortCode: mpesaShortCode,
+            name: mpesaName,
+            apiKey: toNullable(editDraft.mpesaApiKey ?? ''),
+            passKey: toNullable(editDraft.mpesaPassKey ?? ''),
+            secretKey: toNullable(editDraft.mpesaSecretKey ?? ''),
+          }
+        : null;
+
     try {
       await api.patch(`/tenants/${tenant.id}`, {
         name: editDraft.name.trim(),
-        subscriptionPlan: editDraft.subscriptionPlan.trim(),
-        monthlyCharge,
-        email: editDraft.email.trim() || null,
+      subscriptionPlan: editDraft.subscriptionPlan.trim(),
+      monthlyCharge,
+      email: editDraft.email.trim() || null,
         phoneNumber: editDraft.phoneNumber.trim() || null,
         alternativePhoneNumber: editDraft.alternativePhoneNumber.trim() || null,
         county: editDraft.county.trim() || null,
@@ -375,13 +469,7 @@ const TenantDetail = () => {
           childId: editDraft.smsChildId,
           apiKey: editDraft.smsApiKey,
         },
-        mpesaConfig: {
-          shortCode: editDraft.mpesaShortCode,
-          name: editDraft.mpesaName,
-          apiKey: editDraft.mpesaApiKey,
-          passKey: editDraft.mpesaPassKey,
-          secretKey: editDraft.mpesaSecretKey,
-        },
+        ...(mpesaPayload ? { mpesaConfig: mpesaPayload } : {}),
       });
 
       await refreshTenantWorkspace(tenant.id);
@@ -686,7 +774,17 @@ const TenantDetail = () => {
         title={tenant.name}
         subtitle="Tenant profile, subscription posture, billing controls, recent engagement, and status control."
         action={
-          <Stack direction="row" spacing={1.5}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+            <Button
+              variant={editMode ? 'outlined' : 'contained'}
+              onClick={() => {
+                setEditMode((current) => !current);
+                setSuccess(null);
+                setError(null);
+              }}
+            >
+              {editMode ? 'Close editor' : 'Edit tenant'}
+            </Button>
             <Button
               variant="outlined"
               startIcon={<ArrowBackRoundedIcon />}
@@ -702,6 +800,7 @@ const TenantDetail = () => {
             </Button>
           </Stack>
         }
+        eyebrow="Tenant Workspace"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -800,251 +899,405 @@ const TenantDetail = () => {
 
         <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
-            <Stack spacing={2.5}>
-              <Box>
-                <Typography variant="overline" color="primary">
-                  Tenant Settings
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Update the tenant profile, software billing settings, and the SMS or M-Pesa config
-                  used by the tenant app. Secret keys are optional here and only overwrite existing
-                  values when you enter new ones.
-                </Typography>
-              </Box>
+            {editMode ? (
+              <Stack spacing={2.5}>
+                <Box>
+                  <Typography variant="overline" color="primary">
+                    Tenant Settings
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Update the tenant profile, software billing settings, and the SMS or M-Pesa config
+                    used by the tenant app. Secret keys are optional here and only overwrite existing
+                    values when you enter new ones.
+                  </Typography>
+                </Box>
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Tenant Name"
-                    value={editDraft?.name ?? ''}
-                    onChange={(event) => updateEditDraft('name', event.target.value)}
-                  />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Tenant Name"
+                      value={editDraft?.name ?? ''}
+                      onChange={(event) => updateEditDraft('name', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Subscription Plan"
+                      value={editDraft?.subscriptionPlan ?? ''}
+                      onChange={(event) => updateEditDraft('subscriptionPlan', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Monthly Charge"
+                      type="number"
+                      inputProps={{ min: 1, step: '0.01' }}
+                      value={editDraft?.monthlyCharge ?? ''}
+                      onChange={(event) => updateEditDraft('monthlyCharge', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      value={editDraft?.email ?? ''}
+                      onChange={(event) => updateEditDraft('email', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Phone Number"
+                      value={editDraft?.phoneNumber ?? ''}
+                      onChange={(event) => updateEditDraft('phoneNumber', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Alternative Phone"
+                      value={editDraft?.alternativePhoneNumber ?? ''}
+                      onChange={(event) => updateEditDraft('alternativePhoneNumber', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="County"
+                      value={editDraft?.county ?? ''}
+                      onChange={(event) => updateEditDraft('county', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Town"
+                      value={editDraft?.town ?? ''}
+                      onChange={(event) => updateEditDraft('town', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Allowed Users"
+                      type="number"
+                      inputProps={{ min: 1, step: 1 }}
+                      value={editDraft?.allowedUsers ?? ''}
+                      onChange={(event) => updateEditDraft('allowedUsers', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Address"
+                      value={editDraft?.address ?? ''}
+                      onChange={(event) => updateEditDraft('address', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="Building"
+                      value={editDraft?.building ?? ''}
+                      onChange={(event) => updateEditDraft('building', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="Street"
+                      value={editDraft?.street ?? ''}
+                      onChange={(event) => updateEditDraft('street', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Website"
+                      value={editDraft?.website ?? ''}
+                      onChange={(event) => updateEditDraft('website', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Number Of Bags"
+                      type="number"
+                      inputProps={{ min: 0, step: 1 }}
+                      value={editDraft?.numberOfBags ?? ''}
+                      onChange={(event) => updateEditDraft('numberOfBags', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="Payment Details"
+                      value={editDraft?.paymentDetails ?? ''}
+                      onChange={(event) => updateEditDraft('paymentDetails', event.target.value)}
+                    />
+                  </Grid>
                 </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Subscription Plan"
-                    value={editDraft?.subscriptionPlan ?? ''}
-                    onChange={(event) => updateEditDraft('subscriptionPlan', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Monthly Charge"
-                    type="number"
-                    inputProps={{ min: 1, step: '0.01' }}
-                    value={editDraft?.monthlyCharge ?? ''}
-                    onChange={(event) => updateEditDraft('monthlyCharge', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Email"
-                    value={editDraft?.email ?? ''}
-                    onChange={(event) => updateEditDraft('email', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Phone Number"
-                    value={editDraft?.phoneNumber ?? ''}
-                    onChange={(event) => updateEditDraft('phoneNumber', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Alternative Phone"
-                    value={editDraft?.alternativePhoneNumber ?? ''}
-                    onChange={(event) => updateEditDraft('alternativePhoneNumber', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="County"
-                    value={editDraft?.county ?? ''}
-                    onChange={(event) => updateEditDraft('county', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Town"
-                    value={editDraft?.town ?? ''}
-                    onChange={(event) => updateEditDraft('town', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Allowed Users"
-                    type="number"
-                    inputProps={{ min: 1, step: 1 }}
-                    value={editDraft?.allowedUsers ?? ''}
-                    onChange={(event) => updateEditDraft('allowedUsers', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Address"
-                    value={editDraft?.address ?? ''}
-                    onChange={(event) => updateEditDraft('address', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="Building"
-                    value={editDraft?.building ?? ''}
-                    onChange={(event) => updateEditDraft('building', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="Street"
-                    value={editDraft?.street ?? ''}
-                    onChange={(event) => updateEditDraft('street', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Website"
-                    value={editDraft?.website ?? ''}
-                    onChange={(event) => updateEditDraft('website', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Number Of Bags"
-                    type="number"
-                    inputProps={{ min: 0, step: 1 }}
-                    value={editDraft?.numberOfBags ?? ''}
-                    onChange={(event) => updateEditDraft('numberOfBags', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Payment Details"
-                    value={editDraft?.paymentDetails ?? ''}
-                    onChange={(event) => updateEditDraft('paymentDetails', event.target.value)}
-                  />
-                </Grid>
-              </Grid>
 
-              <Divider />
+                <Divider />
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="SMS Partner ID"
-                    value={editDraft?.smsPartnerId ?? ''}
-                    onChange={(event) => updateEditDraft('smsPartnerId', event.target.value)}
-                  />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="SMS Partner ID"
+                      value={editDraft?.smsPartnerId ?? ''}
+                      onChange={(event) => updateEditDraft('smsPartnerId', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="SMS Shortcode"
+                      value={editDraft?.smsShortCode ?? ''}
+                      onChange={(event) => updateEditDraft('smsShortCode', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="SMS Support Phone"
+                      value={editDraft?.smsSupportPhone ?? ''}
+                      onChange={(event) => updateEditDraft('smsSupportPhone', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="SMS Child ID"
+                      value={editDraft?.smsChildId ?? ''}
+                      onChange={(event) => updateEditDraft('smsChildId', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="New SMS API Key"
+                      type="password"
+                      value={editDraft?.smsApiKey ?? ''}
+                      onChange={(event) => updateEditDraft('smsApiKey', event.target.value)}
+                      helperText="Leave blank to keep the current SMS API key"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="M-Pesa Shortcode"
+                      value={editDraft?.mpesaShortCode ?? ''}
+                      onChange={(event) => updateEditDraft('mpesaShortCode', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="M-Pesa Name"
+                      value={editDraft?.mpesaName ?? ''}
+                      onChange={(event) => updateEditDraft('mpesaName', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="New M-Pesa API Key"
+                      type="password"
+                      value={editDraft?.mpesaApiKey ?? ''}
+                      onChange={(event) => updateEditDraft('mpesaApiKey', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="New M-Pesa Pass Key"
+                      type="password"
+                      value={editDraft?.mpesaPassKey ?? ''}
+                      onChange={(event) => updateEditDraft('mpesaPassKey', event.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      fullWidth
+                      label="New M-Pesa Secret Key"
+                      type="password"
+                      value={editDraft?.mpesaSecretKey ?? ''}
+                      onChange={(event) => updateEditDraft('mpesaSecretKey', event.target.value)}
+                    />
+                  </Grid>
                 </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="SMS Shortcode"
-                    value={editDraft?.smsShortCode ?? ''}
-                    onChange={(event) => updateEditDraft('smsShortCode', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="SMS Support Phone"
-                    value={editDraft?.smsSupportPhone ?? ''}
-                    onChange={(event) => updateEditDraft('smsSupportPhone', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="SMS Child ID"
-                    value={editDraft?.smsChildId ?? ''}
-                    onChange={(event) => updateEditDraft('smsChildId', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="New SMS API Key"
-                    type="password"
-                    value={editDraft?.smsApiKey ?? ''}
-                    onChange={(event) => updateEditDraft('smsApiKey', event.target.value)}
-                    helperText="Leave blank to keep the current SMS API key"
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="M-Pesa Shortcode"
-                    value={editDraft?.mpesaShortCode ?? ''}
-                    onChange={(event) => updateEditDraft('mpesaShortCode', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="M-Pesa Name"
-                    value={editDraft?.mpesaName ?? ''}
-                    onChange={(event) => updateEditDraft('mpesaName', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="New M-Pesa API Key"
-                    type="password"
-                    value={editDraft?.mpesaApiKey ?? ''}
-                    onChange={(event) => updateEditDraft('mpesaApiKey', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="New M-Pesa Pass Key"
-                    type="password"
-                    value={editDraft?.mpesaPassKey ?? ''}
-                    onChange={(event) => updateEditDraft('mpesaPassKey', event.target.value)}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="New M-Pesa Secret Key"
-                    type="password"
-                    value={editDraft?.mpesaSecretKey ?? ''}
-                    onChange={(event) => updateEditDraft('mpesaSecretKey', event.target.value)}
-                  />
-                </Grid>
-              </Grid>
 
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                justifyContent="space-between"
-                alignItems={{ xs: 'stretch', sm: 'center' }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  Tenant software bills are created monthly. Unpaid platform bills trigger daily alerts
-                  and the tenant is expired automatically on the 10th until payment clears.
-                </Typography>
-                <Button variant="contained" onClick={saveTenantDetails} disabled={detailsSaving}>
-                  {detailsSaving ? 'Saving tenant...' : 'Save tenant details'}
-                </Button>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.5}
+                  justifyContent="space-between"
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    Tenant software bills are created monthly. Unpaid platform bills trigger daily alerts
+                    and the tenant is expired automatically on the 10th until payment clears.
+                  </Typography>
+                  <Button variant="contained" onClick={saveTenantDetails} disabled={detailsSaving}>
+                    {detailsSaving ? 'Saving tenant...' : 'Save tenant details'}
+                  </Button>
+                </Stack>
               </Stack>
+            ) : (
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="overline" color="primary">
+                    Tenant Settings
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Tenant profile, billing posture, and integrations are managed here. Toggle edit mode when
+                    you want to change the tenant record or visit the integrations hub for SMS/M-Pesa credentials.
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip
+                    label={`SMS: ${smsConfigStatus}`}
+                    color={smsConfigStatus === 'Configured' ? 'success' : 'warning'}
+                    variant="outlined"
+                  />
+                  <Chip
+                    label={`M-Pesa: ${mpesaConfigStatus}`}
+                    color={mpesaConfigStatus === 'Configured' ? 'success' : 'warning'}
+                    variant="outlined"
+                  />
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  Monthly charge {currencyFormatter.format(tenant.monthlyCharge)} and unpaid balances expedite
+                  expiration after the 10th.
+                </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap">
+                  <Button variant="contained" onClick={() => setEditMode(true)}>
+                    Edit tenant
+                  </Button>
+                  <Button variant="outlined" onClick={() => navigate('/integrations')}>
+                    Open integrations hub
+                  </Button>
+                </Stack>
+              </Stack>
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={1.5}>
+              <Typography variant="overline" color="primary">
+                Recent Invoices
+              </Typography>
+              {billingLoading && !invoicePreview.length ? (
+                <Typography color="text.secondary">Loading invoices...</Typography>
+              ) : invoicePreview.length ? (
+                <Stack spacing={1}>
+                  {invoicePreview.map((invoice) => (
+                    <Paper variant="outlined" key={invoice.id} sx={{ p: 1.5 }}>
+                      <Stack spacing={0.5}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography fontWeight={700}>{invoice.invoiceNumber}</Typography>
+                          <StatusChip status={invoice.status} />
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                          {currencyFormatter.format(invoice.invoiceAmount)} · Balance{' '}
+                          {currencyFormatter.format(invoice.balance)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Due {formatDate(invoice.invoicePeriod)}
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">No recent platform invoices.</Typography>
+              )}
+              <Button variant="outlined" size="small" onClick={() => navigate('/billing')}>
+                View billing
+              </Button>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={1.5}>
+              <Typography variant="overline" color="primary">
+                Last Payments
+              </Typography>
+              {financeError ? (
+                <Typography color="error">{financeError}</Typography>
+              ) : financeLoading && !paymentPreview.length ? (
+                <Typography color="text.secondary">Loading payments...</Typography>
+              ) : paymentPreview.length ? (
+                <Stack spacing={1}>
+                  {paymentPreview.map((payment) => (
+                    <Paper variant="outlined" key={payment.id} sx={{ p: 1.25 }}>
+                      <Stack spacing={0.5}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography fontWeight={700}>
+                            {currencyFormatter.format(payment.amount)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {payment.modeOfPayment}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                          {payment.transactionId || 'Manual payment'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDateTime(payment.createdAt)}
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">No payments recorded yet.</Typography>
+              )}
+              <Button variant="outlined" size="small" onClick={() => navigate('/billing')}>
+                View payments
+              </Button>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={1.5}>
+              <Typography variant="overline" color="primary">
+                Receipts
+              </Typography>
+              {financeLoading && !receiptPreview.length ? (
+                <Typography color="text.secondary">Loading receipts...</Typography>
+              ) : receiptPreview.length ? (
+                <Stack spacing={1}>
+                  {receiptPreview.map((receipt) => (
+                    <Paper key={receipt.id} variant="outlined" sx={{ p: 1.5 }}>
+                      <Stack spacing={0.5}>
+                        <Typography fontWeight={700}>{receipt.receiptNumber}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {currencyFormatter.format(receipt.amount)} · {receipt.modeOfPayment}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {receipt.customerName ? `${receipt.customerName} · ` : ''}
+                          {receipt.invoiceNumbers.join(', ')}
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">No receipts available.</Typography>
+              )}
+              <Button variant="outlined" size="small" onClick={() => navigate('/billing')}>
+                View receipts
+              </Button>
             </Stack>
           </Paper>
         </Grid>

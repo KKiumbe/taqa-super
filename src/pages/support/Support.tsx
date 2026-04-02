@@ -9,12 +9,15 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
+import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import {
   AuditLogRow,
@@ -75,6 +78,8 @@ const formatCurrencyAmount = (value?: number) => {
 
 const Support = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [platformLogs, setPlatformLogs] = useState<PlatformActionLogRow[]>([]);
@@ -593,11 +598,36 @@ const Support = () => {
     []
   );
 
+  const auditColumnVisibilityModel = useMemo(
+    () => ({
+      resource: !isCompact,
+      description: !isCompact,
+    }),
+    [isCompact]
+  );
+
+  const platformColumnVisibilityModel = useMemo(
+    () => ({
+      resourceId: !isCompact,
+      details: !isCompact,
+    }),
+    [isCompact]
+  );
+
+  const sentSmsColumnVisibilityModel = useMemo(
+    () => ({
+      admin: !isCompact,
+      recipientCount: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
         title="Communication"
         subtitle="Bulk tenant-admin SMS, billing reminders, tenant outreach, and platform support activity."
+        eyebrow="Support Desk"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -609,6 +639,7 @@ const Support = () => {
             label="Tenant Audit Logs"
             value={auditPagination?.total ?? '...'}
             helper="Tenant-scoped activity across the platform"
+            accent="primary"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
@@ -616,6 +647,7 @@ const Support = () => {
             label="Platform Action Logs"
             value={platformPagination?.total ?? '...'}
             helper="Actions taken by platform admins"
+            accent="secondary"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
@@ -623,10 +655,11 @@ const Support = () => {
             label="Sent SMS Logs"
             value={sentSmsPagination?.total ?? '...'}
             helper="Direct, bulk, and bill-reminder sends"
+            accent="info"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <KpiCard label="Tenant Options" value={tenants.length} helper="Available in the note composer" />
+          <KpiCard label="Tenant Options" value={tenants.length} helper="Available in the note composer" accent="success" />
         </Grid>
       </Grid>
 
@@ -850,7 +883,7 @@ const Support = () => {
                 setSentSmsKindFilter(event.target.value as (typeof sentSmsKinds)[number]);
                 setSentSmsPaginationModel((current) => ({ ...current, page: 0 }));
               }}
-              sx={{ minWidth: 220 }}
+              sx={{ minWidth: { xs: '100%', sm: 220 } }}
             >
               {sentSmsKinds.map((kind) => (
                 <MenuItem key={kind} value={kind}>
@@ -863,18 +896,20 @@ const Support = () => {
             </Typography>
           </Stack>
           <Box sx={{ height: 430 }}>
-            <DataGrid
-              rows={sentSmsLogs}
-              columns={sentSmsColumns}
-              loading={sentSmsLoading}
-              rowCount={sentSmsPagination?.total ?? 0}
-              paginationMode="server"
-              paginationModel={sentSmsPaginationModel}
-              onPaginationModelChange={setSentSmsPaginationModel}
+          <DataGrid
+            rows={sentSmsLogs}
+            columns={sentSmsColumns}
+            columnVisibilityModel={sentSmsColumnVisibilityModel}
+            loading={sentSmsLoading}
+            rowCount={sentSmsPagination?.total ?? 0}
+            paginationMode="server"
+            paginationModel={sentSmsPaginationModel}
+            onPaginationModelChange={setSentSmsPaginationModel}
               pageSizeOptions={[10, 20, 50]}
               disableRowSelectionOnClick
               getRowHeight={() => 'auto'}
               sx={{
+                ...platformDataGridSx(theme),
                 '& .MuiDataGrid-cell': {
                   alignItems: 'flex-start',
                   py: 1,
@@ -896,6 +931,7 @@ const Support = () => {
           <DataGrid
             rows={auditLogs}
             columns={auditColumns}
+            columnVisibilityModel={auditColumnVisibilityModel}
             loading={loading}
             rowCount={auditPagination?.total ?? 0}
             paginationMode="server"
@@ -903,6 +939,8 @@ const Support = () => {
             onPaginationModelChange={setAuditPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>
@@ -918,6 +956,7 @@ const Support = () => {
           <DataGrid
             rows={platformLogs}
             columns={platformColumns}
+            columnVisibilityModel={platformColumnVisibilityModel}
             loading={loading}
             rowCount={platformPagination?.total ?? 0}
             paginationMode="server"
@@ -925,6 +964,8 @@ const Support = () => {
             onPaginationModelChange={setPlatformPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>

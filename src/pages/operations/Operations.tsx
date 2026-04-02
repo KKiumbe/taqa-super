@@ -9,12 +9,15 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import {
   MpesaConfigItem,
@@ -86,6 +89,8 @@ type ActivityRow = {
 
 const Operations = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [smsConfigSummary, setSmsConfigSummary] = useState<ConfigSummary | null>(null);
@@ -389,6 +394,28 @@ const Operations = () => {
     [navigate]
   );
 
+  const coverageColumnVisibilityModel = useMemo(
+    () => ({
+      smsUpdatedAt: !isCompact,
+      mpesaUpdatedAt: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
+  const activityColumnVisibilityModel = useMemo(
+    () => ({
+      consumedMessages: !isCompact,
+      failedMessages: !isCompact,
+      totalTransactions: !isCompact,
+      totalAmount: !isCompact,
+      lastTransactionAt: !isCompact,
+      balanceCheckedAt: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -403,6 +430,7 @@ const Operations = () => {
             sx={{ minWidth: { xs: '100%', md: 320 } }}
           />
         }
+        eyebrow="Operational Health"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -413,6 +441,7 @@ const Operations = () => {
             label="SMS Configured"
             value={smsConfigSummary ? smsConfigSummary.configured : '...'}
             helper={smsConfigSummary ? `${smsConfigSummary.partial} partial, ${smsConfigSummary.missing} missing` : 'Coverage'}
+            accent="success"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -424,6 +453,7 @@ const Operations = () => {
                 ? `${mpesaConfigSummary.partial} partial, ${mpesaConfigSummary.missing} missing`
                 : 'Coverage'
             }
+            accent="info"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -435,6 +465,7 @@ const Operations = () => {
                 ? `${smsBalanceSummary.available} tenants refreshed, ${smsBalanceSummary.errors} errors`
                 : 'Across configured tenants'
             }
+            accent="secondary"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -442,6 +473,7 @@ const Operations = () => {
             label="Failed SMS"
             value={smsUsageSummary ? compactNumberFormatter.format(smsUsageSummary.failedMessages) : '...'}
             helper={smsUsageSummary ? `${compactNumberFormatter.format(smsUsageSummary.consumedMessages)} total SMS sent` : 'Messaging delivery'}
+            accent="warning"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -457,6 +489,7 @@ const Operations = () => {
                 ? currencyFormatter.format(mpesaTransactionSummary.totalAmount)
                 : 'Processing backlog'
             }
+            accent="primary"
           />
         </Grid>
       </Grid>
@@ -472,10 +505,14 @@ const Operations = () => {
           <DataGrid
             rows={coverageRows}
             columns={coverageColumns}
+            columnVisibilityModel={coverageColumnVisibilityModel}
             loading={loading}
             pageSizeOptions={[10, 20, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>
@@ -491,10 +528,14 @@ const Operations = () => {
           <DataGrid
             rows={activityRows}
             columns={activityColumns}
+            columnVisibilityModel={activityColumnVisibilityModel}
             loading={loading}
             pageSizeOptions={[10, 20, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>

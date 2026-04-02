@@ -3,17 +3,21 @@ import {
   Alert,
   Box,
   Button,
+  Grid,
   MenuItem,
   Paper,
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
+import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import KpiCard from '../../components/KpiCard';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import { TenantStatus, TenantSummary } from '../../types';
 
@@ -31,6 +35,8 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 
 const TenantsList = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [rows, setRows] = useState<TenantSummary[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -180,6 +186,17 @@ const TenantsList = () => {
     [navigate]
   );
 
+  const columnVisibilityModel = useMemo(
+    () => ({
+      location: !isCompact,
+      userCount: !isCompact,
+      customerCount: !isCompact,
+      createdAt: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -190,16 +207,47 @@ const TenantsList = () => {
             Add Tenant
           </Button>
         }
+        eyebrow="Tenant Directory"
       />
 
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <KpiCard label="Total Results" value={rowCount} helper="Across the active query" />
-        <KpiCard label="Active On Page" value={visibleStatusCounts.ACTIVE} helper="Visible rows only" />
-        <KpiCard label="Disabled On Page" value={visibleStatusCounts.DISABLED} helper="Visible rows only" />
-        <KpiCard label="Expired On Page" value={visibleStatusCounts.EXPIRED} helper="Visible rows only" />
-      </Stack>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} xl={3}>
+          <KpiCard label="Total Results" value={rowCount} helper="Across the active query" accent="primary" />
+        </Grid>
+        <Grid item xs={12} sm={6} xl={3}>
+          <KpiCard
+            label="Active On Page"
+            value={visibleStatusCounts.ACTIVE}
+            helper="Visible rows only"
+            accent="success"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} xl={3}>
+          <KpiCard
+            label="Disabled On Page"
+            value={visibleStatusCounts.DISABLED}
+            helper="Visible rows only"
+            accent="warning"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} xl={3}>
+          <KpiCard
+            label="Expired On Page"
+            value={visibleStatusCounts.EXPIRED}
+            helper="Visible rows only"
+            accent="secondary"
+          />
+        </Grid>
+      </Grid>
 
       <Paper sx={{ p: 2.5 }}>
+        <Typography variant="overline" color="primary">
+          Tenant Queue
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2.5 }}>
+          Search by tenant, contact, or location. On smaller screens, tap a row to open the tenant
+          workspace directly.
+        </Typography>
         <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} sx={{ mb: 2.5 }}>
           <TextField
             fullWidth
@@ -234,6 +282,7 @@ const TenantsList = () => {
           autoHeight
           rows={rows}
           columns={columns}
+          columnVisibilityModel={columnVisibilityModel}
           rowCount={rowCount}
           loading={loading}
           paginationMode="server"
@@ -242,13 +291,8 @@ const TenantsList = () => {
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
           onRowClick={(params) => navigate(`/tenants/${params.row.id}`)}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: 'rgba(24, 48, 51, 0.04)',
-              borderRadius: 2,
-            },
-          }}
+          getRowHeight={() => 'auto'}
+          sx={platformDataGridSx}
         />
       </Paper>
     </Stack>

@@ -18,6 +18,7 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
@@ -26,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import {
   BillingRecordSource,
@@ -71,6 +73,7 @@ const toAmountInput = (value: number) =>
 const Billing = () => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [summary, setSummary] = useState<RevenueSummaryPayload | null>(null);
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [invoices, setInvoices] = useState<PlatformInvoice[]>([]);
@@ -583,6 +586,28 @@ const Billing = () => {
     [navigate]
   );
 
+  const invoiceColumnVisibilityModel = useMemo(
+    () => ({
+      source: !isCompact,
+      legacyCustomerName: !isCompact,
+      amountPaid: !isCompact,
+      latestPaymentAt: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
+  const paymentColumnVisibilityModel = useMemo(
+    () => ({
+      source: !isCompact,
+      invoiceStatus: !isCompact,
+      linkedInvoiceNumbers: !isCompact,
+      transactionId: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -608,7 +633,7 @@ const Billing = () => {
                 setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
               }}
               placeholder="Tenant, invoice, transaction"
-              sx={{ minWidth: 220 }}
+              sx={{ minWidth: { xs: '100%', md: 220 } }}
             />
             <TextField
               select
@@ -619,7 +644,7 @@ const Billing = () => {
                 setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
                 setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
               }}
-              sx={{ minWidth: 160 }}
+              sx={{ minWidth: { xs: '100%', md: 160 } }}
             >
               {billingSources.map((status) => (
                 <MenuItem key={status} value={status}>
@@ -635,7 +660,7 @@ const Billing = () => {
                 setInvoiceStatus(event.target.value as 'ALL' | InvoiceStatus);
                 setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
               }}
-              sx={{ minWidth: 180 }}
+              sx={{ minWidth: { xs: '100%', md: 180 } }}
             >
               {invoiceStatuses.map((status) => (
                 <MenuItem key={status} value={status}>
@@ -646,6 +671,7 @@ const Billing = () => {
             </Stack>
           </Stack>
         }
+        eyebrow="Revenue Desk"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -657,6 +683,7 @@ const Billing = () => {
             label="MRR"
             value={summary ? currencyFormatter.format(summary.summary.mrr) : '...'}
             helper="Current-month invoice amount"
+            accent="secondary"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -664,6 +691,7 @@ const Billing = () => {
             label="Collections This Month"
             value={summary ? currencyFormatter.format(summary.summary.collectionsThisMonth) : '...'}
             helper="Payments received this month"
+            accent="success"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -671,6 +699,7 @@ const Billing = () => {
             label="Unpaid Invoices"
             value={summary ? summary.summary.unpaidInvoiceCount : '...'}
             helper={summary ? currencyFormatter.format(summary.summary.unpaidInvoiceAmount) : 'Outstanding balance'}
+            accent="warning"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={3}>
@@ -678,6 +707,7 @@ const Billing = () => {
             label="Total Payments"
             value={summary ? currencyFormatter.format(summary.summary.totalPaymentsReceived) : '...'}
             helper={summary ? `${summary.summary.totalPayments} payments recorded` : 'Across all tenants'}
+            accent="primary"
           />
         </Grid>
       </Grid>
@@ -685,7 +715,7 @@ const Billing = () => {
       {summary ? (
         <Grid container spacing={2}>
           <Grid item xs={12} lg={5}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: { xs: 2.25, md: 3 }, minHeight: '100%' }}>
               <Typography variant="overline" color="primary">
                 Invoice Trend
               </Typography>
@@ -693,7 +723,7 @@ const Billing = () => {
                 Monthly invoice generation across recent periods.
               </Typography>
               <BarChart
-                height={280}
+                height={isCompact ? 240 : 280}
                 xAxis={[{ scaleType: 'band', data: summary.revenueByMonth.map((item) => item.label) }]}
                 series={[
                   {
@@ -702,12 +732,12 @@ const Billing = () => {
                     color: theme.palette.primary.main,
                   },
                 ]}
-                margin={{ left: 56, right: 24, top: 24, bottom: 24 }}
+                margin={{ left: isCompact ? 36 : 56, right: 12, top: 24, bottom: 24 }}
               />
             </Paper>
           </Grid>
           <Grid item xs={12} lg={7}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: { xs: 2.25, md: 3 }, minHeight: '100%' }}>
               <Typography variant="overline" color="primary">
                 Collections Comparison
               </Typography>
@@ -715,7 +745,7 @@ const Billing = () => {
                 Invoiced amounts compared with payments received by month.
               </Typography>
               <BarChart
-                height={280}
+                height={isCompact ? 240 : 280}
                 xAxis={[{ scaleType: 'band', data: summary.paymentsVsInvoices.map((item) => item.label) }]}
                 series={[
                   {
@@ -729,7 +759,7 @@ const Billing = () => {
                     color: theme.palette.secondary.main,
                   },
                 ]}
-                margin={{ left: 56, right: 24, top: 24, bottom: 24 }}
+                margin={{ left: isCompact ? 36 : 56, right: 12, top: 24, bottom: 24 }}
               />
             </Paper>
           </Grid>
@@ -747,6 +777,7 @@ const Billing = () => {
           <DataGrid
             rows={invoices}
             columns={invoiceColumns}
+            columnVisibilityModel={invoiceColumnVisibilityModel}
             loading={loading}
             rowCount={invoicePagination?.total ?? 0}
             paginationMode="server"
@@ -754,6 +785,9 @@ const Billing = () => {
             onPaginationModelChange={setInvoicePaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>
@@ -769,6 +803,7 @@ const Billing = () => {
           <DataGrid
             rows={payments}
             columns={paymentColumns}
+            columnVisibilityModel={paymentColumnVisibilityModel}
             loading={loading}
             rowCount={paymentPagination?.total ?? 0}
             paginationMode="server"
@@ -776,6 +811,9 @@ const Billing = () => {
             onPaginationModelChange={setPaymentPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>

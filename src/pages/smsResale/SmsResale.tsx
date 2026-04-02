@@ -16,12 +16,15 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
+import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import KpiCard from '../../components/KpiCard';
 import StatusChip from '../../components/StatusChip';
+import { platformDataGridSx } from '../../components/dataGridStyles';
 import { currencyFormatter, formatDateTime } from '../../lib/format';
 import { api } from '../../services/api';
 import { PaginationMeta, SmsResalePurchase, SmsResaleSummary, TenantSummary } from '../../types';
@@ -30,6 +33,8 @@ const purchaseStatuses = ['ALL', 'PENDING', 'COMPLETED', 'FAILED'] as const;
 
 const SmsResale = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [rows, setRows] = useState<SmsResalePurchase[]>([]);
   const [summary, setSummary] = useState<SmsResaleSummary | null>(null);
@@ -313,6 +318,16 @@ const SmsResale = () => {
     [navigate, tenants]
   );
 
+  const columnVisibilityModel = useMemo(
+    () => ({
+      phoneNumber: !isCompact,
+      payment: !isCompact,
+      gatewayRefs: !isCompact,
+      timeline: !isCompact,
+    }),
+    [isCompact]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -331,7 +346,7 @@ const SmsResale = () => {
                 setPaginationModel((current) => ({ ...current, page: 0 }));
               }}
               placeholder="Tenant, phone, receipt, account ref"
-              sx={{ minWidth: 240 }}
+              sx={{ minWidth: { xs: '100%', md: 240 } }}
             />
             <TextField
               select
@@ -341,7 +356,7 @@ const SmsResale = () => {
                 setStatusFilter(event.target.value as (typeof purchaseStatuses)[number]);
                 setPaginationModel((current) => ({ ...current, page: 0 }));
               }}
-              sx={{ minWidth: 170 }}
+              sx={{ minWidth: { xs: '100%', md: 170 } }}
             >
               {purchaseStatuses.map((status) => (
                 <MenuItem key={status} value={status}>
@@ -351,6 +366,7 @@ const SmsResale = () => {
             </TextField>
           </Stack>
         }
+        eyebrow="SMS Revenue"
       />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
@@ -358,29 +374,31 @@ const SmsResale = () => {
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} xl={2}>
-          <KpiCard label="Purchases" value={summary?.totalPurchases ?? '...'} helper="Filtered resale rows" />
+          <KpiCard label="Purchases" value={summary?.totalPurchases ?? '...'} helper="Filtered resale rows" accent="primary" />
         </Grid>
         <Grid item xs={12} sm={6} xl={2}>
           <KpiCard
             label="Amount"
             value={summary ? currencyFormatter.format(summary.totalAmount) : '...'}
             helper="KES initiated for SMS resale"
+            accent="secondary"
           />
         </Grid>
         <Grid item xs={12} sm={6} xl={2}>
-          <KpiCard label="Units" value={summary?.totalSmsUnits ?? '...'} helper="SMS units requested" />
+          <KpiCard label="Units" value={summary?.totalSmsUnits ?? '...'} helper="SMS units requested" accent="info" />
         </Grid>
         <Grid item xs={12} sm={6} xl={2}>
-          <KpiCard label="Completed" value={summary?.completed ?? '...'} helper="Credited purchases" />
+          <KpiCard label="Completed" value={summary?.completed ?? '...'} helper="Credited purchases" accent="success" />
         </Grid>
         <Grid item xs={12} sm={6} xl={2}>
-          <KpiCard label="Pending" value={summary?.pending ?? '...'} helper="Waiting on credit or payment" />
+          <KpiCard label="Pending" value={summary?.pending ?? '...'} helper="Waiting on credit or payment" accent="warning" />
         </Grid>
         <Grid item xs={12} sm={6} xl={2}>
           <KpiCard
             label="Paid Not Credited"
             value={summary?.paidNotCredited ?? '...'}
             helper="Payment exists but purchase is still pending"
+            accent="warning"
           />
         </Grid>
       </Grid>
@@ -396,6 +414,7 @@ const SmsResale = () => {
           <DataGrid
             rows={rows}
             columns={columns}
+            columnVisibilityModel={columnVisibilityModel}
             loading={loading}
             rowCount={pagination?.total ?? 0}
             paginationMode="server"
@@ -403,6 +422,9 @@ const SmsResale = () => {
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[20, 50, 100]}
             disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
           />
         </Box>
       </Paper>

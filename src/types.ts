@@ -232,6 +232,17 @@ export interface PlatformPayment {
   createdAt: string;
 }
 
+export interface PlatformReceipt {
+  id: string;
+  receiptNumber: string;
+  amount: number;
+  modeOfPayment: ModeOfPayment;
+  transactionCode: string | null;
+  customerName: string | null;
+  invoiceNumbers: string[];
+  createdAt: string;
+}
+
 export interface UsageTenant {
   tenantId: number;
   name: string;
