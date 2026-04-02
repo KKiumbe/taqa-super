@@ -190,7 +190,7 @@ const DashboardLayout = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         background:
           'linear-gradient(180deg, rgba(16,40,43,0.96) 0%, rgba(32,75,77,0.9) 60%, rgba(9,30,44,0.85) 100%)',
         color: 'common.white',
@@ -237,80 +237,82 @@ const DashboardLayout = () => {
       )}
 
       {/* User card — avatar only when collapsed */}
-      <Box
-        sx={{
-          mx: desktopSidebarCollapsed ? 'auto' : 2.5,
-          mb: 2.25,
-          p: desktopSidebarCollapsed ? 0 : 2,
-          borderRadius: 4,
-          border: desktopSidebarCollapsed ? 'none' : '1px solid rgba(255,255,255,0.12)',
-          backgroundColor: desktopSidebarCollapsed ? 'transparent' : 'rgba(255,255,255,0.08)',
-          backdropFilter: desktopSidebarCollapsed ? 'none' : 'blur(16px)',
-          transition: 'all 200ms ease',
-        }}
-      >
-        {desktopSidebarCollapsed ? (
-          <Tooltip title={adminName} placement="right">
-            <Avatar
-              sx={{
-                width: 40,
-                height: 40,
-                bgcolor: 'rgba(255,255,255,0.14)',
-                color: 'common.white',
-                fontWeight: 700,
-                cursor: 'default',
-              }}
-            >
-              {adminInitials}
-            </Avatar>
-          </Tooltip>
-        ) : (
-          <>
-            <Stack direction="row" spacing={1.5} alignItems="center">
+      {(desktopSidebarCollapsed || !isDesktop) && (
+        <Box
+          sx={{
+            mx: desktopSidebarCollapsed ? 'auto' : 2.5,
+            mb: 2.25,
+            p: desktopSidebarCollapsed ? 0 : 2,
+            borderRadius: 4,
+            border: desktopSidebarCollapsed ? 'none' : '1px solid rgba(255,255,255,0.12)',
+            backgroundColor: desktopSidebarCollapsed ? 'transparent' : 'rgba(255,255,255,0.08)',
+            backdropFilter: desktopSidebarCollapsed ? 'none' : 'blur(16px)',
+            transition: 'all 200ms ease',
+          }}
+        >
+          {desktopSidebarCollapsed ? (
+            <Tooltip title={adminName} placement="right">
               <Avatar
                 sx={{
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   bgcolor: 'rgba(255,255,255,0.14)',
                   color: 'common.white',
                   fontWeight: 700,
+                  cursor: 'default',
                 }}
               >
                 {adminInitials}
               </Avatar>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography fontWeight={700} sx={{ color: 'common.white' }}>
-                  {adminName}
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.8, wordBreak: 'break-word' }}>
-                  {admin?.email ?? 'No email'}
-                </Typography>
-              </Box>
-            </Stack>
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
-              <Chip
-                size="small"
-                label={admin?.role ?? 'SUPER_ADMIN'}
-                sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
-              />
-              {smsSender ? (
+            </Tooltip>
+          ) : (
+            <>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Avatar
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    bgcolor: 'rgba(255,255,255,0.14)',
+                    color: 'common.white',
+                    fontWeight: 700,
+                  }}
+                >
+                  {adminInitials}
+                </Avatar>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography fontWeight={700} sx={{ color: 'common.white' }}>
+                    {adminName}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8, wordBreak: 'break-word' }}>
+                    {admin?.email ?? 'No email'}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
                 <Chip
                   size="small"
-                  label={
-                    smsSender.balanceStatus === 'AVAILABLE'
-                      ? `SMS ${smsBalanceFormatter.format(smsSender.balance ?? 0)}`
-                      : 'SMS Error'
-                  }
-                  color={smsSender.balanceStatus === 'AVAILABLE' ? 'success' : 'warning'}
-                  variant="outlined"
-                  onClick={() => navigate('/sms-resale')}
-                  sx={{ color: 'common.white', borderColor: 'rgba(255,255,255,0.25)' }}
+                  label={admin?.role ?? 'SUPER_ADMIN'}
+                  sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'common.white' }}
                 />
-              ) : null}
-            </Stack>
-          </>
-        )}
-      </Box>
+                {smsSender ? (
+                  <Chip
+                    size="small"
+                    label={
+                      smsSender.balanceStatus === 'AVAILABLE'
+                        ? `SMS ${smsBalanceFormatter.format(smsSender.balance ?? 0)}`
+                        : 'SMS Error'
+                    }
+                    color={smsSender.balanceStatus === 'AVAILABLE' ? 'success' : 'warning'}
+                    variant="outlined"
+                    onClick={() => navigate('/sms-resale')}
+                    sx={{ color: 'common.white', borderColor: 'rgba(255,255,255,0.25)' }}
+                  />
+                ) : null}
+              </Stack>
+            </>
+          )}
+        </Box>
+      )}
 
       {/* Navigate label + collapse toggle (expanded only) */}
       {!desktopSidebarCollapsed && (
@@ -341,6 +343,7 @@ const DashboardLayout = () => {
       <Box
         sx={{
           flexGrow: 1,
+          minHeight: 0,
           overflowY: 'auto',
           px: 1.5,
           py: 0.5,
@@ -431,6 +434,22 @@ const DashboardLayout = () => {
               <LogoutRoundedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+        </Box>
+      ) : isDesktop ? (
+        <Box sx={{ px: 2.5, pb: 3, pt: 1, mt: 'auto' }}>
+          <Button
+            fullWidth
+            color="inherit"
+            variant="outlined"
+            startIcon={<LogoutRoundedIcon />}
+            onClick={handleSignOut}
+            sx={{
+              borderColor: 'rgba(255,255,255,0.35)',
+              color: 'common.white',
+            }}
+          >
+            Sign out
+          </Button>
         </Box>
       ) : (
         <Box sx={{ px: 2.5, pb: 3, mt: 1 }}>
