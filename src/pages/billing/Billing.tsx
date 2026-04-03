@@ -30,19 +30,18 @@ import StatusChip from '../../components/StatusChip';
 import { platformDataGridSx } from '../../components/dataGridStyles';
 import { api } from '../../services/api';
 import {
-  BillingRecordSource,
   InvoiceStatus,
   ModeOfPayment,
   PaginationMeta,
   PlatformInvoice,
   PlatformPayment,
+  PlatformReceipt,
   RevenueSummaryPayload,
   TenantSummary,
 } from '../../types';
 import { currencyFormatter, formatDate, formatDateTime } from '../../lib/format';
 
 const invoiceStatuses: Array<'ALL' | InvoiceStatus> = ['ALL', 'UNPAID', 'PPAID', 'PAID', 'CANCELLED'];
-const billingSources: Array<'ALL' | BillingRecordSource> = ['ALL', 'PLATFORM', 'LEGACY_CUSTOMER'];
 const paymentModes: ModeOfPayment[] = [
   'MPESA',
   'BANK_TRANSFER',
@@ -50,10 +49,6 @@ const paymentModes: ModeOfPayment[] = [
   'CREDIT_CARD',
   'DEBIT_CARD',
 ];
-const sourceLabel: Record<BillingRecordSource, string> = {
-  PLATFORM: 'Platform',
-  LEGACY_CUSTOMER: 'Migrated',
-};
 
 const getCurrentMonthInput = () => new Date().toISOString().slice(0, 7);
 
@@ -78,9 +73,11 @@ const Billing = () => {
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [invoices, setInvoices] = useState<PlatformInvoice[]>([]);
   const [payments, setPayments] = useState<PlatformPayment[]>([]);
+  const [receipts, setReceipts] = useState<PlatformReceipt[]>([]);
   const [paymentTenantInvoices, setPaymentTenantInvoices] = useState<PlatformInvoice[]>([]);
   const [invoicePagination, setInvoicePagination] = useState<PaginationMeta | null>(null);
   const [paymentPagination, setPaymentPagination] = useState<PaginationMeta | null>(null);
+  const [receiptPagination, setReceiptPagination] = useState<PaginationMeta | null>(null);
   const [invoicePaginationModel, setInvoicePaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 10,
@@ -89,8 +86,11 @@ const Billing = () => {
     page: 0,
     pageSize: 10,
   });
+  const [receiptPaginationModel, setReceiptPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 10,
+  });
   const [invoiceStatus, setInvoiceStatus] = useState<'ALL' | InvoiceStatus>('ALL');
-  const [billingSource, setBillingSource] = useState<'ALL' | BillingRecordSource>('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [tenantOptionsLoading, setTenantOptionsLoading] = useState(false);
@@ -120,14 +120,13 @@ const Billing = () => {
       setError(null);
 
       try {
-        const [summaryResponse, invoicesResponse, paymentsResponse] = await Promise.all([
+        const [summaryResponse, invoicesResponse, paymentsResponse, receiptsResponse] = await Promise.all([
           api.get<RevenueSummaryPayload>('/billing/revenue-summary'),
           api.get<{ invoices: PlatformInvoice[]; pagination: PaginationMeta }>('/billing/invoices', {
             params: {
               page: invoicePaginationModel.page + 1,
               limit: invoicePaginationModel.pageSize,
               status: invoiceStatus === 'ALL' ? undefined : invoiceStatus,
-              source: billingSource === 'ALL' ? undefined : billingSource,
               search: search || undefined,
             },
           }),
@@ -135,8 +134,13 @@ const Billing = () => {
             params: {
               page: paymentPaginationModel.page + 1,
               limit: paymentPaginationModel.pageSize,
-              source: billingSource === 'ALL' ? undefined : billingSource,
               search: search || undefined,
+            },
+          }),
+          api.get<{ receipts: PlatformReceipt[]; pagination: PaginationMeta }>('/receipts/tenant', {
+            params: {
+              page: receiptPaginationModel.page + 1,
+              limit: receiptPaginationModel.pageSize,
             },
           }),
         ]);
@@ -148,8 +152,10 @@ const Billing = () => {
         setSummary(summaryResponse.data);
         setInvoices(invoicesResponse.data.invoices);
         setPayments(paymentsResponse.data.payments);
+        setReceipts(receiptsResponse.data.receipts);
         setInvoicePagination(invoicesResponse.data.pagination);
         setPaymentPagination(paymentsResponse.data.pagination);
+        setReceiptPagination(receiptsResponse.data.pagination);
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.response?.data?.message ?? 'Failed to load billing data');
@@ -171,8 +177,9 @@ const Billing = () => {
     invoicePaginationModel.pageSize,
     paymentPaginationModel.page,
     paymentPaginationModel.pageSize,
+    receiptPaginationModel.page,
+    receiptPaginationModel.pageSize,
     invoiceStatus,
-    billingSource,
     search,
     refreshKey,
   ]);
@@ -397,6 +404,19 @@ const Billing = () => {
     }
   };
 
+  const resendReceiptSms = async (receiptId: string) => {
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string }>(`/receipts/${receiptId}/resend-sms`);
+      setSuccess(response.data.message || 'Receipt SMS resent successfully.');
+      setRefreshKey((current) => current + 1);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to resend receipt SMS');
+    }
+  };
+
   const invoiceColumns = useMemo<GridColDef<PlatformInvoice>[]>(
     () => [
       {
@@ -412,28 +432,9 @@ const Billing = () => {
         ),
       },
       {
-        field: 'source',
-        headerName: 'Source',
-        minWidth: 130,
-        renderCell: (params) => (
-          <Chip
-            size="small"
-            color={params.row.source === 'LEGACY_CUSTOMER' ? 'secondary' : 'primary'}
-            variant={params.row.source === 'LEGACY_CUSTOMER' ? 'filled' : 'outlined'}
-            label={sourceLabel[params.row.source]}
-          />
-        ),
-      },
-      {
         field: 'invoiceNumber',
         headerName: 'Invoice',
         minWidth: 150,
-      },
-      {
-        field: 'legacyCustomerName',
-        headerName: 'Legacy Customer',
-        minWidth: 190,
-        valueFormatter: (value) => (value as string | null) || 'Direct platform billing',
       },
       {
         field: 'invoicePeriod',
@@ -498,24 +499,9 @@ const Billing = () => {
           <Box sx={{ py: 1 }}>
             <Typography fontWeight={700}>{params.row.tenantName}</Typography>
             <Typography variant="body2" color="text.secondary">
-              {params.row.legacyCustomerName
-                ? `Legacy: ${params.row.legacyCustomerName}`
-                : params.row.invoiceNumber ?? 'No linked invoice'}
+              {params.row.invoiceNumber ?? 'No linked invoice'}
             </Typography>
           </Box>
-        ),
-      },
-      {
-        field: 'source',
-        headerName: 'Source',
-        minWidth: 130,
-        renderCell: (params) => (
-          <Chip
-            size="small"
-            color={params.row.source === 'LEGACY_CUSTOMER' ? 'secondary' : 'primary'}
-            variant={params.row.source === 'LEGACY_CUSTOMER' ? 'filled' : 'outlined'}
-            label={sourceLabel[params.row.source]}
-          />
         ),
       },
       {
@@ -586,10 +572,80 @@ const Billing = () => {
     [navigate]
   );
 
+  const receiptColumns = useMemo<GridColDef<PlatformReceipt>[]>(
+    () => [
+      {
+        field: 'receiptNumber',
+        headerName: 'Receipt No',
+        minWidth: 180,
+      },
+      {
+        field: 'tenantName',
+        headerName: 'Tenant',
+        flex: 1,
+        minWidth: 220,
+        valueFormatter: (value) => (value as string | null) || 'Unknown tenant',
+      },
+      {
+        field: 'amount',
+        headerName: 'Amount',
+        minWidth: 140,
+        valueFormatter: (value) => currencyFormatter.format(value as number),
+      },
+      {
+        field: 'modeOfPayment',
+        headerName: 'Mode',
+        minWidth: 140,
+      },
+      {
+        field: 'transactionId',
+        headerName: 'Transaction ID',
+        minWidth: 180,
+        valueFormatter: (value) => (value as string | null) || 'Not provided',
+      },
+      {
+        field: 'billingPeriod',
+        headerName: 'Billing Period',
+        minWidth: 170,
+        valueFormatter: (value) => formatDate(value as string),
+      },
+      {
+        field: 'smsSentAt',
+        headerName: 'SMS Sent',
+        minWidth: 180,
+        renderCell: (params) =>
+          params.row.smsSentAt ? (
+            <Chip size="small" color="success" label={formatDateTime(params.row.smsSentAt)} />
+          ) : (
+            <Button size="small" variant="outlined" onClick={() => resendReceiptSms(params.row.id)}>
+              Resend
+            </Button>
+          ),
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Issued',
+        minWidth: 180,
+        valueFormatter: (value) => formatDateTime(value as string),
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        sortable: false,
+        filterable: false,
+        minWidth: 120,
+        renderCell: (params) => (
+          <Button size="small" variant="outlined" onClick={() => navigate(`/tenants/${params.row.tenantId}`)}>
+            Open
+          </Button>
+        ),
+      },
+    ],
+    [navigate]
+  );
+
   const invoiceColumnVisibilityModel = useMemo(
     () => ({
-      source: !isCompact,
-      legacyCustomerName: !isCompact,
       amountPaid: !isCompact,
       latestPaymentAt: !isCompact,
       actions: !isCompact,
@@ -599,10 +655,18 @@ const Billing = () => {
 
   const paymentColumnVisibilityModel = useMemo(
     () => ({
-      source: !isCompact,
       invoiceStatus: !isCompact,
       linkedInvoiceNumbers: !isCompact,
       transactionId: !isCompact,
+      actions: !isCompact,
+    }),
+    [isCompact]
+  );
+
+  const receiptColumnVisibilityModel = useMemo(
+    () => ({
+      transactionId: !isCompact,
+      billingPeriod: !isCompact,
       actions: !isCompact,
     }),
     [isCompact]
@@ -631,27 +695,11 @@ const Billing = () => {
                 setSearch(event.target.value);
                 setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
                 setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
+                setReceiptPaginationModel((current) => ({ ...current, page: 0 }));
               }}
               placeholder="Tenant, invoice, transaction"
               sx={{ minWidth: { xs: '100%', md: 220 } }}
             />
-            <TextField
-              select
-              label="Source"
-              value={billingSource}
-              onChange={(event) => {
-                setBillingSource(event.target.value as 'ALL' | BillingRecordSource);
-                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
-                setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
-              }}
-              sx={{ minWidth: { xs: '100%', md: 160 } }}
-            >
-              {billingSources.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status === 'ALL' ? 'All sources' : sourceLabel[status]}
-                </MenuItem>
-              ))}
-            </TextField>
             <TextField
               select
               label="Invoice status"
@@ -809,6 +857,32 @@ const Billing = () => {
             paginationMode="server"
             paginationModel={paymentPaginationModel}
             onPaginationModelChange={setPaymentPaginationModel}
+            pageSizeOptions={[10, 20, 50]}
+            disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            getRowHeight={() => 'auto'}
+            sx={platformDataGridSx}
+          />
+        </Box>
+      </Paper>
+
+      <Paper sx={{ p: 2.5 }}>
+        <Typography variant="overline" color="primary">
+          Receipts
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Subscription payment receipts issued to tenants.
+        </Typography>
+        <Box sx={{ height: 430 }}>
+          <DataGrid
+            rows={receipts}
+            columns={receiptColumns}
+            columnVisibilityModel={receiptColumnVisibilityModel}
+            loading={loading}
+            rowCount={receiptPagination?.total ?? 0}
+            paginationMode="server"
+            paginationModel={receiptPaginationModel}
+            onPaginationModelChange={setReceiptPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
             onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}

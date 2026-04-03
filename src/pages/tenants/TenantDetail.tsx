@@ -31,6 +31,7 @@ import {
   PlatformPayment,
   PlatformReceipt,
   TenantDetail as TenantDetailType,
+  TenantCustomerStats,
   TenantStatus,
 } from '../../types';
 import { currencyFormatter, formatDate, formatDateTime, formatRiskFlag } from '../../lib/format';
@@ -150,6 +151,7 @@ const TenantDetail = () => {
   const [billingInvoices, setBillingInvoices] = useState<PlatformInvoice[]>([]);
   const [tenantPayments, setTenantPayments] = useState<PlatformPayment[]>([]);
   const [tenantReceipts, setTenantReceipts] = useState<PlatformReceipt[]>([]);
+  const [tenantStats, setTenantStats] = useState<TenantCustomerStats | null>(null);
   const [statusDraft, setStatusDraft] = useState<TenantStatus>('ACTIVE');
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
   const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
@@ -198,7 +200,7 @@ const TenantDetail = () => {
       setError(null);
 
       try {
-        const [tenantResponse, invoicesResponse, senderResponse] = await Promise.all([
+        const [tenantResponse, invoicesResponse, senderResponse, statsResponse] = await Promise.all([
           api.get<{ tenant: TenantDetailType }>(`/tenants/${id}`),
           api.get<{ invoices: PlatformInvoice[] }>(`/billing/invoices`, {
             params: {
@@ -207,6 +209,7 @@ const TenantDetail = () => {
             },
           }),
           api.get<{ sender: PlatformSmsSenderProfile }>('/support/sms-sender'),
+          api.get<{ stats: TenantCustomerStats }>(`/tenants/${id}/stats`),
         ]);
 
         if (cancelled) {
@@ -218,6 +221,7 @@ const TenantDetail = () => {
         setStatusDraft(tenantResponse.data.tenant.status);
         setBillingInvoices(invoicesResponse.data.invoices);
         setPlatformSmsSender(senderResponse.data.sender);
+        setTenantStats(statsResponse.data.stats);
         setInvoiceAmountDraft((current) =>
           current || toAmountInput(tenantResponse.data.tenant.monthlyCharge)
         );
@@ -301,7 +305,7 @@ const TenantDetail = () => {
   }, [tenant?.id, financeRefreshKey]);
 
   const refreshTenantWorkspace = async (tenantId: number): Promise<void> => {
-    const [tenantResponse, invoicesResponse] = await Promise.all([
+    const [tenantResponse, invoicesResponse, statsResponse] = await Promise.all([
       api.get<{ tenant: TenantDetailType }>(`/tenants/${tenantId}`),
       api.get<{ invoices: PlatformInvoice[] }>(`/billing/invoices`, {
         params: {
@@ -309,12 +313,14 @@ const TenantDetail = () => {
           limit: 25,
         },
       }),
+      api.get<{ stats: TenantCustomerStats }>(`/tenants/${tenantId}/stats`),
     ]);
 
     setTenant(tenantResponse.data.tenant);
     setEditDraft(buildTenantEditDraft(tenantResponse.data.tenant));
     setStatusDraft(tenantResponse.data.tenant.status);
     setBillingInvoices(invoicesResponse.data.invoices);
+    setTenantStats(statsResponse.data.stats);
     setSmsRecipientsDraft((current) =>
       current ||
       tenantResponse.data.tenant.phoneNumber ||
@@ -1285,8 +1291,8 @@ const TenantDetail = () => {
                           {currencyFormatter.format(receipt.amount)} · {receipt.modeOfPayment}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {receipt.customerName ? `${receipt.customerName} · ` : ''}
-                          {receipt.invoiceNumbers.join(', ')}
+                          {formatDate(receipt.billingPeriod)} ·{' '}
+                          {receipt.smsSentAt ? 'SMS sent' : 'SMS pending'}
                         </Typography>
                       </Stack>
                     </Paper>
@@ -1298,6 +1304,42 @@ const TenantDetail = () => {
               <Button variant="outlined" size="small" onClick={() => navigate('/billing')}>
                 View receipts
               </Button>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={2}>
+              <Typography variant="overline" color="primary">
+                Customer Stats
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Total Customers"
+                    value={tenantStats ? String(tenantStats.customersTotal) : '...'}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Active Customers"
+                    value={tenantStats ? String(tenantStats.customersActive) : '...'}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Total Invoiced"
+                    value={tenantStats ? currencyFormatter.format(tenantStats.totalInvoiced) : '...'}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Total Collected"
+                    value={tenantStats ? currencyFormatter.format(tenantStats.totalCollected) : '...'}
+                  />
+                </Grid>
+              </Grid>
             </Stack>
           </Paper>
         </Grid>

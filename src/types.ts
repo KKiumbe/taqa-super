@@ -1,7 +1,6 @@
 export type TenantStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 export type InvoiceStatus = 'UNPAID' | 'PAID' | 'PPAID' | 'CANCELLED';
 export type ConfigStatus = 'CONFIGURED' | 'PARTIAL' | 'MISSING';
-export type BillingRecordSource = 'PLATFORM' | 'LEGACY_CUSTOMER';
 export type ModeOfPayment = 'CASH' | 'MPESA' | 'BANK_TRANSFER' | 'CREDIT_CARD' | 'DEBIT_CARD';
 
 export interface PlatformAdminProfile {
@@ -200,10 +199,6 @@ export interface PlatformInvoice {
   amountPaid: number;
   balance: number;
   status: InvoiceStatus;
-  source: BillingRecordSource;
-  legacyCustomerId: string | null;
-  legacyCustomerName: string | null;
-  legacyInvoiceId: string | null;
   createdAt: string;
   updatedAt: string;
   plan: PlanSummary;
@@ -222,11 +217,6 @@ export interface PlatformPayment {
   amount: number;
   modeOfPayment: ModeOfPayment;
   transactionId: string | null;
-  source: BillingRecordSource;
-  legacyCustomerId: string | null;
-  legacyCustomerName: string | null;
-  legacyPaymentId: string | null;
-  legacyReceiptId: string | null;
   linkedInvoiceNumbers: string[];
   linkedInvoiceCount: number;
   createdAt: string;
@@ -234,13 +224,33 @@ export interface PlatformPayment {
 
 export interface PlatformReceipt {
   id: string;
+  tenantId: number;
+  tenantName: string | null;
+  tenantPaymentId: string;
   receiptNumber: string;
   amount: number;
   modeOfPayment: ModeOfPayment;
-  transactionCode: string | null;
-  customerName: string | null;
-  invoiceNumbers: string[];
+  transactionId: string | null;
+  billingPeriod: string;
+  smsSentAt: string | null;
   createdAt: string;
+}
+
+export interface PlatformSmsConfig {
+  id: number;
+  partnerId: string;
+  apiKey: string;
+  shortCode: string;
+  senderName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TenantCustomerStats {
+  customersTotal: number;
+  customersActive: number;
+  totalInvoiced: number;
+  totalCollected: number;
 }
 
 export interface UsageTenant {
