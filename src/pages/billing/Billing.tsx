@@ -65,6 +65,9 @@ const toAmountInput = (value: number) =>
     useGrouping: false,
   });
 
+const canMutateInvoice = (invoice: PlatformInvoice) =>
+  invoice.status === 'UNPAID' && invoice.amountPaid <= 0;
+
 const Billing = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -97,13 +100,19 @@ const Billing = () => {
   const [paymentInvoicesLoading, setPaymentInvoicesLoading] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [invoiceEditTarget, setInvoiceEditTarget] = useState<PlatformInvoice | null>(null);
+  const [invoiceCancelTarget, setInvoiceCancelTarget] = useState<PlatformInvoice | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
+  const [savingInvoiceEdit, setSavingInvoiceEdit] = useState(false);
+  const [cancellingInvoice, setCancellingInvoice] = useState(false);
   const [selectedInvoiceTenantId, setSelectedInvoiceTenantId] = useState('');
   const [selectedPaymentTenantId, setSelectedPaymentTenantId] = useState('');
   const [selectedPaymentInvoiceId, setSelectedPaymentInvoiceId] = useState('');
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
   const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
+  const [editInvoiceAmountDraft, setEditInvoiceAmountDraft] = useState('');
+  const [editInvoicePeriodDraft, setEditInvoicePeriodDraft] = useState(getCurrentMonthInput());
   const [paymentAmountDraft, setPaymentAmountDraft] = useState('');
   const [paymentModeDraft, setPaymentModeDraft] = useState<ModeOfPayment>('MPESA');
   const [paymentReferenceDraft, setPaymentReferenceDraft] = useState('');
@@ -299,6 +308,22 @@ const Billing = () => {
     setInvoicePeriodDraft(getCurrentMonthInput());
   };
 
+  const openInvoiceEditDialog = (invoice: PlatformInvoice) => {
+    setInvoiceEditTarget(invoice);
+    setEditInvoiceAmountDraft(toAmountInput(invoice.invoiceAmount));
+    setEditInvoicePeriodDraft(String(invoice.invoicePeriod).slice(0, 7));
+  };
+
+  const resetInvoiceEditDialog = () => {
+    setInvoiceEditTarget(null);
+    setEditInvoiceAmountDraft('');
+    setEditInvoicePeriodDraft(getCurrentMonthInput());
+  };
+
+  const resetInvoiceCancelDialog = () => {
+    setInvoiceCancelTarget(null);
+  };
+
   const resetPaymentDialog = () => {
     setPaymentDialogOpen(false);
     setSelectedPaymentTenantId((current) => current || String(tenants[0]?.id ?? ''));
@@ -404,6 +429,70 @@ const Billing = () => {
     }
   };
 
+  const adjustInvoice = async () => {
+    if (!invoiceEditTarget) {
+      return;
+    }
+
+    const invoiceAmount = Number.parseFloat(editInvoiceAmountDraft);
+
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+      setError('Enter a valid invoice amount greater than zero.');
+      return;
+    }
+
+    if (!editInvoicePeriodDraft) {
+      setError('Choose the invoice month before adjusting the invoice.');
+      return;
+    }
+
+    setSavingInvoiceEdit(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.patch<{ invoice: PlatformInvoice }>(
+        `/billing/invoices/${invoiceEditTarget.id}`,
+        {
+          invoiceAmount,
+          invoicePeriod: editInvoicePeriodDraft,
+        }
+      );
+
+      setRefreshKey((current) => current + 1);
+      setSuccess(`Adjusted invoice ${response.data.invoice.invoiceNumber} for ${response.data.invoice.tenantName}.`);
+      resetInvoiceEditDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to adjust tenant invoice');
+    } finally {
+      setSavingInvoiceEdit(false);
+    }
+  };
+
+  const cancelInvoice = async () => {
+    if (!invoiceCancelTarget) {
+      return;
+    }
+
+    setCancellingInvoice(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ invoice: PlatformInvoice; message?: string }>(
+        `/billing/invoices/${invoiceCancelTarget.id}/cancel`
+      );
+
+      setRefreshKey((current) => current + 1);
+      setSuccess(response.data.message || `Cancelled invoice ${invoiceCancelTarget.invoiceNumber}.`);
+      resetInvoiceCancelDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to cancel tenant invoice');
+    } finally {
+      setCancellingInvoice(false);
+    }
+  };
+
   const resendReceiptSms = async (receiptId: string) => {
     setError(null);
     setSuccess(null);
@@ -474,18 +563,57 @@ const Billing = () => {
       },
       {
         field: 'actions',
-        headerName: '',
+        headerName: 'Actions',
         sortable: false,
         filterable: false,
-        minWidth: 120,
-        renderCell: (params) => (
-          <Button size="small" variant="outlined" onClick={() => navigate(`/tenants/${params.row.tenantId}`)}>
-            Open
-          </Button>
-        ),
+        minWidth: 280,
+        renderCell: (params) => {
+          const invoice = params.row;
+          const mutable = canMutateInvoice(invoice);
+
+          return (
+            <Stack direction={isCompact ? 'column' : 'row'} spacing={1} sx={{ py: 1 }}>
+              {mutable ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openInvoiceEditDialog(invoice);
+                  }}
+                >
+                  Adjust
+                </Button>
+              ) : null}
+              {mutable ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setInvoiceCancelTarget(invoice);
+                  }}
+                >
+                  Cancel
+                </Button>
+              ) : null}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/tenants/${invoice.tenantId}`);
+                }}
+              >
+                Open
+              </Button>
+            </Stack>
+          );
+        },
       },
     ],
-    [navigate]
+    [isCompact, navigate]
   );
 
   const paymentColumns = useMemo<GridColDef<PlatformPayment>[]>(
@@ -563,7 +691,14 @@ const Billing = () => {
         filterable: false,
         minWidth: 120,
         renderCell: (params) => (
-          <Button size="small" variant="outlined" onClick={() => navigate(`/tenants/${params.row.tenantId}`)}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={(event) => {
+              event.stopPropagation();
+              navigate(`/tenants/${params.row.tenantId}`);
+            }}
+          >
             Open
           </Button>
         ),
@@ -617,7 +752,14 @@ const Billing = () => {
           params.row.smsSentAt ? (
             <Chip size="small" color="success" label={formatDateTime(params.row.smsSentAt)} />
           ) : (
-            <Button size="small" variant="outlined" onClick={() => resendReceiptSms(params.row.id)}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={(event) => {
+                event.stopPropagation();
+                resendReceiptSms(params.row.id);
+              }}
+            >
               Resend
             </Button>
           ),
@@ -635,7 +777,14 @@ const Billing = () => {
         filterable: false,
         minWidth: 120,
         renderCell: (params) => (
-          <Button size="small" variant="outlined" onClick={() => navigate(`/tenants/${params.row.tenantId}`)}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={(event) => {
+              event.stopPropagation();
+              navigate(`/tenants/${params.row.tenantId}`);
+            }}
+          >
             Open
           </Button>
         ),
@@ -648,7 +797,6 @@ const Billing = () => {
     () => ({
       amountPaid: !isCompact,
       latestPaymentAt: !isCompact,
-      actions: !isCompact,
     }),
     [isCompact]
   );
@@ -943,6 +1091,93 @@ const Billing = () => {
           </Button>
           <Button onClick={createManualInvoice} variant="contained" disabled={creatingInvoice || tenantOptionsLoading}>
             {creatingInvoice ? 'Creating invoice...' : 'Create invoice'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(invoiceEditTarget)}
+        onClose={savingInvoiceEdit ? undefined : resetInvoiceEditDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Adjust Invoice</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Adjust the invoice month or amount. Only unpaid invoices with no recorded payments can be changed.
+            </Typography>
+            {invoiceEditTarget ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack spacing={0.75}>
+                  <Typography fontWeight={700}>{invoiceEditTarget.invoiceNumber}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {invoiceEditTarget.tenantName} · {currencyFormatter.format(invoiceEditTarget.balance)} outstanding
+                  </Typography>
+                </Stack>
+              </Paper>
+            ) : null}
+            <TextField
+              label="Invoice Amount"
+              type="number"
+              inputProps={{ min: 1, step: '0.01' }}
+              value={editInvoiceAmountDraft}
+              onChange={(event) => setEditInvoiceAmountDraft(event.target.value)}
+              placeholder="0.00"
+            />
+            <TextField
+              label="Invoice Month"
+              type="month"
+              value={editInvoicePeriodDraft}
+              onChange={(event) => setEditInvoicePeriodDraft(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetInvoiceEditDialog} disabled={savingInvoiceEdit}>
+            Close
+          </Button>
+          <Button onClick={adjustInvoice} variant="contained" disabled={savingInvoiceEdit}>
+            {savingInvoiceEdit ? 'Saving...' : 'Save changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(invoiceCancelTarget)}
+        onClose={cancellingInvoice ? undefined : resetInvoiceCancelDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Cancel Invoice</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              This voids the invoice and removes it from outstanding billing totals. The action is only available before
+              any payment is recorded.
+            </Typography>
+            {invoiceCancelTarget ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack spacing={0.75}>
+                  <Typography fontWeight={700}>{invoiceCancelTarget.invoiceNumber}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {invoiceCancelTarget.tenantName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {currencyFormatter.format(invoiceCancelTarget.invoiceAmount)} · {formatDate(invoiceCancelTarget.invoicePeriod)}
+                  </Typography>
+                </Stack>
+              </Paper>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetInvoiceCancelDialog} disabled={cancellingInvoice}>
+            Keep invoice
+          </Button>
+          <Button onClick={cancelInvoice} color="warning" variant="contained" disabled={cancellingInvoice}>
+            {cancellingInvoice ? 'Cancelling...' : 'Confirm cancel'}
           </Button>
         </DialogActions>
       </Dialog>
