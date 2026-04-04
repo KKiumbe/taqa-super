@@ -1,0 +1,50 @@
+<h2>Design: SMS Actions Section</h2>
+<p class="subtitle">SMS Top Up and Send Bill sit side-by-side as equal cards, above the existing general Tenant Communication section.</p>
+
+<div class="mockup">
+  <div class="mockup-header">SMS Actions Row (2 equal columns)</div>
+  <div class="mockup-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px;">
+
+      <!-- SMS Top Up Card -->
+      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:20px;">
+        <div style="font-size:10px;text-transform:uppercase;color:#1976d2;font-weight:700;letter-spacing:1px;margin-bottom:8px;">SMS Top Up</div>
+        <div style="font-size:13px;color:#666;margin-bottom:16px;">Credit SMS units to this tenant instantly using the platform SMS reseller profile.</div>
+        <div style="margin-bottom:10px;">
+          <input class="mock-input" placeholder="SMS Units (e.g. 500)" style="width:100%;box-sizing:border-box;margin-bottom:8px;">
+          <input class="mock-input" placeholder="Reason: Platform SMS top-up" style="width:100%;box-sizing:border-box;">
+        </div>
+        <button class="mock-button" style="width:100%;">Credit SMS Units</button>
+      </div>
+
+      <!-- Send Bill Card -->
+      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:20px;">
+        <div style="font-size:10px;text-transform:uppercase;color:#f57c00;font-weight:700;letter-spacing:1px;margin-bottom:8px;">Send Bill via SMS</div>
+        <div style="font-size:13px;color:#666;margin-bottom:16px;">Send the tenant's outstanding bill to their phone number. Message is pre-filled from the latest unpaid invoice and can be edited before sending.</div>
+        <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:10px;font-size:12px;color:#666;margin-bottom:16px;">
+          <strong>Latest unpaid:</strong> INV-2024-042 · KES 4,500<br>
+          <strong>Recipient:</strong> 0712345678
+        </div>
+        <button style="width:100%;padding:8px;background:#f57c00;color:white;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;">Send Bill SMS →</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-top:20px;">
+  <div class="mockup-header">Below: existing Tenant Communication (general SMS) — unchanged</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="font-size:10px;text-transform:uppercase;color:#1976d2;font-weight:700;letter-spacing:1px;margin-bottom:8px;">Tenant Communication</div>
+    <div style="display:grid;grid-template-columns:2fr 3fr;gap:12px;">
+      <textarea class="mock-input" style="resize:none;min-height:60px;" placeholder="Recipients: 0700000000, 0711111111"></textarea>
+      <textarea class="mock-input" style="resize:none;min-height:60px;" placeholder="SMS Message..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="mock-button">Use tenant contact</button>
+      <button class="mock-button">Send SMS (1)</button>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does this look right? Reply in terminal.</p>

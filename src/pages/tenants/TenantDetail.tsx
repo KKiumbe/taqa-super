@@ -44,8 +44,10 @@ const toAmountInput = (value: number): string => {
 };
 
 type PlatformSmsSenderProfile = {
-  tenantId: number;
-  tenantName: string;
+  source: 'PLATFORM_CONFIG';
+  tenantId: number | null;
+  tenantName: string | null;
+  senderName: string;
   partnerId: string;
   shortCode: string;
   customerSupportPhoneNumber: string;
@@ -1491,9 +1493,8 @@ const TenantDetail = () => {
                     Tenant Communication
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Super-admin SMS uses the platform sender profile linked to tenant{' '}
-                    {platformSmsSender?.tenantId ?? 2}
-                    {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
+                    Super-admin SMS uses the platform sender profile{' '}
+                    {platformSmsSender?.senderName ?? 'Platform SMS'} with partner ID{' '}
                     {platformSmsSender?.partnerId ?? '4680'}.
                   </Typography>
                 </Box>

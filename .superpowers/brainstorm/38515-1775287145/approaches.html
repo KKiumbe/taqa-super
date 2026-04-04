@@ -1,0 +1,81 @@
+<h2>Tenant Detail Screen — Layout Approaches</h2>
+<p class="subtitle">3 ways to restructure after removals and additions. Changes: remove Manual Payment form, remove Manual Invoice form, remove Support Notes · Add: click-to-open details modal, Send Bill via SMS modal.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Minimal Restructure</h3>
+      <p>Remove the 3 sections, wire up click handlers, add a "Send Bill" button next to the existing SMS section. Screen gets shorter but layout stays the same.</p>
+      <div class="mockup" style="margin-top:12px;font-size:12px;">
+        <div class="mockup-header">Section order (top → bottom)</div>
+        <div class="mockup-body" style="padding:8px 12px;">
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Profile · Status Control</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Settings</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Recent Invoices (3, clickable) · Last Payments (3, clickable) · Receipts (3, clickable)</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Customer Stats · Subscription</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Engagement Snapshot · Recent Billing · SMS Top Up</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Communication + <strong>Send Bill button added here</strong></div>
+          <div style="padding:4px 8px;background:#ffcdd2;border-radius:4px;margin:3px 0;text-decoration:line-through;opacity:0.6;">Support Notes — removed</div>
+          <div style="padding:4px 8px;background:#ffcdd2;border-radius:4px;margin:3px 0;text-decoration:line-through;opacity:0.6;">Manual Invoice form — removed</div>
+          <div style="padding:4px 8px;background:#ffcdd2;border-radius:4px;margin:3px 0;text-decoration:line-through;opacity:0.6;">Manual Payment form — removed</div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Lowest risk, fewest changes</li><li>Familiar order for existing users</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Billing Queue + Recent Invoices are still duplicate sections</li><li>SMS Top Up and Send Bill are separated by distance</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Consolidated Billing Row</h3>
+      <p>Merge the duplicate "Recent Billing" and "Recent Invoices" cards into one. Group SMS Top Up + Send Bill together as a Communication card. Cleaner, less redundancy.</p>
+      <div class="mockup" style="margin-top:12px;font-size:12px;">
+        <div class="mockup-header">Section order (top → bottom)</div>
+        <div class="mockup-body" style="padding:8px 12px;">
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Profile · Status Control</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Settings</div>
+          <div style="padding:4px 8px;background:#e3f2fd;border-radius:4px;margin:3px 0;border-left:3px solid #1976d2;"><strong>Last 3 Invoices (clickable) · Last 3 Payments (clickable) · Last 3 Receipts (clickable)</strong></div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Customer Stats · Subscription · Engagement Snapshot</div>
+          <div style="padding:4px 8px;background:#e3f2fd;border-radius:4px;margin:3px 0;border-left:3px solid #1976d2;"><strong>SMS Top Up card · Send Bill via SMS card</strong> (side by side)</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Tenant Communication (general SMS)</div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Removes duplication (Billing Queue merged into Invoices card)</li><li>SMS actions grouped together</li><li>Shorter scroll</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Moderate restructure — more lines to change</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Tab-Based Layout</h3>
+      <p>Split the screen into tabs: Overview, Billing, Communication. Each tab is focused and short. No more endless scroll.</p>
+      <div class="mockup" style="margin-top:12px;font-size:12px;">
+        <div class="mockup-header">Tab structure</div>
+        <div class="mockup-body" style="padding:8px 12px;">
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <span style="padding:4px 12px;background:#1976d2;color:white;border-radius:4px;">Overview</span>
+            <span style="padding:4px 12px;background:#f5f5f5;border-radius:4px;">Billing</span>
+            <span style="padding:4px 12px;background:#f5f5f5;border-radius:4px;">Communication</span>
+          </div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px;">Overview tab:</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Profile · Stats · Subscription · Engagement · Counters</div>
+          <div style="font-size:11px;color:#666;margin:8px 0 4px;">Billing tab:</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">Last 3 Invoices · Last 3 Payments · Last 3 Receipts (all clickable)</div>
+          <div style="font-size:11px;color:#666;margin:8px 0 4px;">Communication tab:</div>
+          <div style="padding:4px 8px;background:#e8f5e9;border-radius:4px;margin:3px 0;">SMS Top Up · Send Bill via SMS · General SMS</div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>No scrolling — everything above the fold per tab</li><li>Cleanest structure</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Biggest change — may feel unfamiliar</li><li>Context is split across tabs</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -344,8 +344,10 @@ export interface SmsBalanceItem {
 }
 
 export interface PlatformSmsSenderProfile {
-  tenantId: number;
-  tenantName: string;
+  source: 'PLATFORM_CONFIG';
+  tenantId: number | null;
+  tenantName: string | null;
+  senderName: string;
   partnerId: string;
   shortCode: string;
   customerSupportPhoneNumber: string;
@@ -483,6 +485,8 @@ export interface PlatformSentSmsLogRow {
   sender: {
     tenantId: number | null;
     tenantName: string | null;
+    senderName?: string | null;
+    source?: string | null;
     partnerId: string | null;
   };
   target: {
