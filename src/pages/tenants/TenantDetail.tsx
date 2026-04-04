@@ -376,39 +376,6 @@ const TenantDetail = () => {
     }
   };
 
-  const openSendBill = () => {
-    if (!tenant || openInvoices.length === 0) return;
-    const recipient = tenant.phoneNumber || tenant.alternativePhoneNumber || '';
-    const invoice = openInvoices[0];
-    const paybill = platformSmsSender?.shortCode ?? '4091081';
-    const message = `Dear ${tenant.name}, your platform bill for ${formatDate(invoice.invoicePeriod)} is ${currencyFormatter.format(invoice.balance)} (outstanding). Kindly pay via Paybill ${paybill}, Acc: ${recipient}. Thank you.`;
-    setSendBillRecipientDraft(recipient);
-    setSendBillMessageDraft(message);
-    setSendBillOpen(true);
-  };
-
-  const sendBillSms = async () => {
-    if (!tenant) return;
-
-    setSendingBill(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await api.post<{ message: string }>('/support/send-sms', {
-        tenantId: tenant.id,
-        recipients: sendBillRecipientDraft,
-        message: sendBillMessageDraft,
-      });
-      setSendBillOpen(false);
-      setSuccess(`Bill sent to ${tenant.name}.`);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to send bill SMS');
-    } finally {
-      setSendingBill(false);
-    }
-  };
-
   const statusDirty = tenant ? tenant.status !== statusDraft : false;
   const deleteConfirmationMatches = tenant
     ? deleteConfirmationDraft.trim().toLowerCase() === tenant.name.trim().toLowerCase()
@@ -438,6 +405,45 @@ const TenantDetail = () => {
   );
 
   const invoicePreview = useMemo(() => billingInvoices.slice(0, 3), [billingInvoices]);
+
+  const openSendBill = () => {
+    if (!tenant || openInvoices.length === 0) return;
+    const recipient = tenant.phoneNumber || tenant.alternativePhoneNumber || '';
+    const invoice = openInvoices[0];
+    const paybill = platformSmsSender?.shortCode ?? '4091081';
+    const message = `Dear ${tenant.name}, your platform bill for ${formatDate(invoice.invoicePeriod)} is ${currencyFormatter.format(invoice.balance)} (outstanding). Kindly pay via Paybill ${paybill}, Acc: ${recipient}. Thank you.`;
+    setSendBillRecipientDraft(recipient);
+    setSendBillMessageDraft(message);
+    setSendBillOpen(true);
+  };
+
+  const sendBillSms = async () => {
+    if (!tenant) return;
+
+    if (!sendBillRecipientDraft.trim()) {
+      setError('Enter a recipient phone number before sending.');
+      return;
+    }
+
+    setSendingBill(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.post<{ message: string }>('/support/send-sms', {
+        tenantId: tenant.id,
+        recipients: sendBillRecipientDraft,
+        message: sendBillMessageDraft,
+      });
+      setSendBillOpen(false);
+      setSuccess(`Bill sent to ${tenant.name}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send bill SMS');
+    } finally {
+      setSendingBill(false);
+    }
+  };
+
   const paymentPreview = useMemo(() => tenantPayments.slice(0, 3), [tenantPayments]);
   const receiptPreview = useMemo(() => tenantReceipts.slice(0, 3), [tenantReceipts]);
 
