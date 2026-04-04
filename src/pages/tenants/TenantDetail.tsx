@@ -152,6 +152,26 @@ const TenantDetail = () => {
   const [financeError, setFinanceError] = useState<string | null>(null);
   const [financeRefreshKey, setFinanceRefreshKey] = useState(0);
 
+  // Detail modals
+  const [invoiceDetailTarget, setInvoiceDetailTarget] = useState<PlatformInvoice | null>(null);
+  const [paymentDetailTarget, setPaymentDetailTarget] = useState<PlatformPayment | null>(null);
+  const [receiptDetailTarget, setReceiptDetailTarget] = useState<PlatformReceipt | null>(null);
+
+  // Invoice detail — adjust
+  const [adjustAmountDraft, setAdjustAmountDraft] = useState('');
+  const [adjustPeriodDraft, setAdjustPeriodDraft] = useState('');
+  const [adjusting, setAdjusting] = useState(false);
+
+  // Invoice detail — cancel
+  const [cancelConfirming, setCancelConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Send Bill modal
+  const [sendBillOpen, setSendBillOpen] = useState(false);
+  const [sendBillRecipientDraft, setSendBillRecipientDraft] = useState('');
+  const [sendBillMessageDraft, setSendBillMessageDraft] = useState('');
+  const [sendingBill, setSendingBill] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -291,6 +311,102 @@ const TenantDetail = () => {
       ''
     );
     setFinanceRefreshKey((key) => key + 1);
+  };
+
+  const openInvoiceDetail = (invoice: PlatformInvoice) => {
+    setInvoiceDetailTarget(invoice);
+    setAdjustAmountDraft(toAmountInput(invoice.invoiceAmount));
+    setAdjustPeriodDraft(invoice.invoicePeriod);
+    setAdjusting(false);
+    setCancelConfirming(false);
+    setCancelling(false);
+  };
+
+  const adjustInvoice = async () => {
+    if (!invoiceDetailTarget) return;
+
+    const invoiceAmount = Number.parseFloat(adjustAmountDraft);
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+      setError('Enter a valid invoice amount greater than zero.');
+      return;
+    }
+    if (!adjustPeriodDraft) {
+      setError('Choose the invoice month before adjusting.');
+      return;
+    }
+
+    setAdjusting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.patch<{ invoice: PlatformInvoice }>(
+        `/billing/invoices/${invoiceDetailTarget.id}`,
+        { invoiceAmount, invoicePeriod: adjustPeriodDraft }
+      );
+      await refreshTenantWorkspace(tenant!.id);
+      setSuccess(`Adjusted invoice ${response.data.invoice.invoiceNumber}.`);
+      setInvoiceDetailTarget(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to adjust invoice');
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  const cancelInvoice = async () => {
+    if (!invoiceDetailTarget) return;
+
+    setCancelling(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ invoice: PlatformInvoice; message?: string }>(
+        `/billing/invoices/${invoiceDetailTarget.id}/cancel`
+      );
+      await refreshTenantWorkspace(tenant!.id);
+      setSuccess(response.data.message ?? `Cancelled invoice ${invoiceDetailTarget.invoiceNumber}.`);
+      setInvoiceDetailTarget(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to cancel invoice');
+    } finally {
+      setCancelling(false);
+      setCancelConfirming(false);
+    }
+  };
+
+  const openSendBill = () => {
+    if (!tenant || openInvoices.length === 0) return;
+    const recipient = tenant.phoneNumber || tenant.alternativePhoneNumber || '';
+    const invoice = openInvoices[0];
+    const paybill = platformSmsSender?.shortCode ?? '4091081';
+    const message = `Dear ${tenant.name}, your platform bill for ${formatDate(invoice.invoicePeriod)} is ${currencyFormatter.format(invoice.balance)} (outstanding). Kindly pay via Paybill ${paybill}, Acc: ${recipient}. Thank you.`;
+    setSendBillRecipientDraft(recipient);
+    setSendBillMessageDraft(message);
+    setSendBillOpen(true);
+  };
+
+  const sendBillSms = async () => {
+    if (!tenant) return;
+
+    setSendingBill(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.post<{ message: string }>('/support/send-sms', {
+        tenantId: tenant.id,
+        recipients: sendBillRecipientDraft,
+        message: sendBillMessageDraft,
+      });
+      setSendBillOpen(false);
+      setSuccess(`Bill sent to ${tenant.name}.`);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to send bill SMS');
+    } finally {
+      setSendingBill(false);
+    }
   };
 
   const statusDirty = tenant ? tenant.status !== statusDraft : false;
