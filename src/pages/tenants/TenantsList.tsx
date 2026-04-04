@@ -148,6 +148,15 @@ const TenantsList = () => {
         valueGetter: (_, row) => [row.town, row.county].filter(Boolean).join(', ') || 'Unspecified',
       },
       {
+        field: 'balance',
+        headerName: 'Balance',
+        minWidth: 150,
+        align: 'right',
+        headerAlign: 'right',
+        valueFormatter: (value) =>
+          typeof value === 'number' ? currency.format(value) : 'Not available',
+      },
+      {
         field: 'userCount',
         headerName: 'Users',
         minWidth: 110,

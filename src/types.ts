@@ -30,6 +30,7 @@ export interface TenantSummary {
   phoneNumber: string | null;
   county: string | null;
   town: string | null;
+  balance?: number | null;
   allowedUsers: number;
   createdAt: string;
   updatedAt: string;
