@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -68,6 +68,17 @@ const toAmountInput = (value: number) =>
 const canMutateInvoice = (invoice: PlatformInvoice) =>
   invoice.status === 'UNPAID' && invoice.amountPaid <= 0;
 
+const DetailMetric = ({ label, value }: { label: string; value: string }) => (
+  <Box>
+    <Typography variant="overline" color="text.secondary">
+      {label}
+    </Typography>
+    <Typography variant="body1" fontWeight={700}>
+      {value}
+    </Typography>
+  </Box>
+);
+
 const Billing = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -94,7 +105,6 @@ const Billing = () => {
     pageSize: 10,
   });
   const [invoiceStatus, setInvoiceStatus] = useState<'ALL' | InvoiceStatus>('ALL');
-  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [tenantOptionsLoading, setTenantOptionsLoading] = useState(false);
   const [paymentInvoicesLoading, setPaymentInvoicesLoading] = useState(false);
@@ -102,6 +112,8 @@ const Billing = () => {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<PlatformInvoice | null>(null);
   const [invoiceCancelTarget, setInvoiceCancelTarget] = useState<PlatformInvoice | null>(null);
+  const [invoiceDetailTarget, setInvoiceDetailTarget] = useState<PlatformInvoice | null>(null);
+  const [paymentDetailTarget, setPaymentDetailTarget] = useState<PlatformPayment | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [savingInvoiceEdit, setSavingInvoiceEdit] = useState(false);
@@ -109,6 +121,8 @@ const Billing = () => {
   const [selectedInvoiceTenantId, setSelectedInvoiceTenantId] = useState('');
   const [selectedPaymentTenantId, setSelectedPaymentTenantId] = useState('');
   const [selectedPaymentInvoiceId, setSelectedPaymentInvoiceId] = useState('');
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [paymentSearch, setPaymentSearch] = useState('');
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
   const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
   const [editInvoiceAmountDraft, setEditInvoiceAmountDraft] = useState('');
@@ -120,6 +134,8 @@ const Billing = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const deferredInvoiceSearch = useDeferredValue(invoiceSearch);
+  const deferredPaymentSearch = useDeferredValue(paymentSearch);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,14 +152,14 @@ const Billing = () => {
               page: invoicePaginationModel.page + 1,
               limit: invoicePaginationModel.pageSize,
               status: invoiceStatus === 'ALL' ? undefined : invoiceStatus,
-              search: search || undefined,
+              search: deferredInvoiceSearch || undefined,
             },
           }),
           api.get<{ payments: PlatformPayment[]; pagination: PaginationMeta }>('/billing/payments', {
             params: {
               page: paymentPaginationModel.page + 1,
               limit: paymentPaginationModel.pageSize,
-              search: search || undefined,
+              search: deferredPaymentSearch || undefined,
             },
           }),
           api.get<{ receipts: PlatformReceipt[]; pagination: PaginationMeta }>('/receipts/tenant', {
@@ -189,7 +205,8 @@ const Billing = () => {
     receiptPaginationModel.page,
     receiptPaginationModel.pageSize,
     invoiceStatus,
-    search,
+    deferredInvoiceSearch,
+    deferredPaymentSearch,
     refreshKey,
   ]);
 
@@ -320,6 +337,10 @@ const Billing = () => {
     setEditInvoicePeriodDraft(getCurrentMonthInput());
   };
 
+  const resetInvoiceDetailDialog = () => {
+    setInvoiceDetailTarget(null);
+  };
+
   const resetInvoiceCancelDialog = () => {
     setInvoiceCancelTarget(null);
   };
@@ -332,6 +353,10 @@ const Billing = () => {
     setPaymentModeDraft('MPESA');
     setPaymentReferenceDraft('');
     setPaidAtDraft(getCurrentDateTimeInput());
+  };
+
+  const resetPaymentDetailDialog = () => {
+    setPaymentDetailTarget(null);
   };
 
   const createManualInvoice = async () => {
@@ -835,36 +860,6 @@ const Billing = () => {
                 Manual Payment
               </Button>
             </Stack>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-            <TextField
-              label="Search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
-                setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
-                setReceiptPaginationModel((current) => ({ ...current, page: 0 }));
-              }}
-              placeholder="Tenant, invoice, transaction"
-              sx={{ minWidth: { xs: '100%', md: 220 } }}
-            />
-            <TextField
-              select
-              label="Invoice status"
-              value={invoiceStatus}
-              onChange={(event) => {
-                setInvoiceStatus(event.target.value as 'ALL' | InvoiceStatus);
-                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
-              }}
-              sx={{ minWidth: { xs: '100%', md: 180 } }}
-            >
-              {invoiceStatuses.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status === 'ALL' ? 'All invoices' : status}
-                </MenuItem>
-              ))}
-            </TextField>
-            </Stack>
           </Stack>
         }
         eyebrow="Revenue Desk"
@@ -963,12 +958,50 @@ const Billing = () => {
       ) : null}
 
       <Paper sx={{ p: 2.5 }}>
-        <Typography variant="overline" color="primary">
-          Invoices
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Cross-tenant invoice posture with balance visibility.
-        </Typography>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={1.5}
+          justifyContent="space-between"
+          alignItems={{ xs: 'stretch', md: 'flex-start' }}
+          sx={{ mb: 2 }}
+        >
+          <Box>
+            <Typography variant="overline" color="primary">
+              Invoices
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Cross-tenant invoice posture with balance visibility. Click a row to view invoice details.
+            </Typography>
+          </Box>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField
+              label="Search invoices"
+              value={invoiceSearch}
+              onChange={(event) => {
+                setInvoiceSearch(event.target.value);
+                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              placeholder="Tenant name or invoice number"
+              sx={{ minWidth: { xs: '100%', md: 240 } }}
+            />
+            <TextField
+              select
+              label="Invoice status"
+              value={invoiceStatus}
+              onChange={(event) => {
+                setInvoiceStatus(event.target.value as 'ALL' | InvoiceStatus);
+                setInvoicePaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+              sx={{ minWidth: { xs: '100%', md: 180 } }}
+            >
+              {invoiceStatuses.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status === 'ALL' ? 'All invoices' : status}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </Stack>
         <Box sx={{ height: 430 }}>
           <DataGrid
             rows={invoices}
@@ -981,7 +1014,7 @@ const Billing = () => {
             onPaginationModelChange={setInvoicePaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
-            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            onRowClick={(params) => setInvoiceDetailTarget(params.row)}
             getRowHeight={() => 'auto'}
             sx={platformDataGridSx}
           />
@@ -989,12 +1022,32 @@ const Billing = () => {
       </Paper>
 
       <Paper sx={{ p: 2.5 }}>
-        <Typography variant="overline" color="primary">
-          Payments
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Payment history recorded against tenant invoices.
-        </Typography>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={1.5}
+          justifyContent="space-between"
+          alignItems={{ xs: 'stretch', md: 'flex-start' }}
+          sx={{ mb: 2 }}
+        >
+          <Box>
+            <Typography variant="overline" color="primary">
+              Payments
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Payment history recorded against tenant invoices. Click a row to view payment details.
+            </Typography>
+          </Box>
+          <TextField
+            label="Search payments"
+            value={paymentSearch}
+            onChange={(event) => {
+              setPaymentSearch(event.target.value);
+              setPaymentPaginationModel((current) => ({ ...current, page: 0 }));
+            }}
+            placeholder="Tenant name, transaction ID, or invoice"
+            sx={{ minWidth: { xs: '100%', md: 280 } }}
+          />
+        </Stack>
         <Box sx={{ height: 430 }}>
           <DataGrid
             rows={payments}
@@ -1007,7 +1060,7 @@ const Billing = () => {
             onPaginationModelChange={setPaymentPaginationModel}
             pageSizeOptions={[10, 20, 50]}
             disableRowSelectionOnClick
-            onRowClick={(params) => navigate(`/tenants/${params.row.tenantId}`)}
+            onRowClick={(params) => setPaymentDetailTarget(params.row)}
             getRowHeight={() => 'auto'}
             sx={platformDataGridSx}
           />
@@ -1302,6 +1355,206 @@ const Billing = () => {
           >
             {recordingPayment ? 'Recording payment...' : 'Record payment'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(invoiceDetailTarget)}
+        onClose={resetInvoiceDetailDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Invoice {invoiceDetailTarget?.invoiceNumber}</DialogTitle>
+        <DialogContent>
+          {invoiceDetailTarget ? (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Tenant" value={invoiceDetailTarget.tenantName} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Tenant Status
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <StatusChip status={invoiceDetailTarget.tenantStatus} />
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Invoice Status
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <StatusChip status={invoiceDetailTarget.status} />
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Billing Period"
+                    value={formatDate(invoiceDetailTarget.invoicePeriod)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Invoice Amount"
+                    value={currencyFormatter.format(invoiceDetailTarget.invoiceAmount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Amount Paid"
+                    value={currencyFormatter.format(invoiceDetailTarget.amountPaid)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Outstanding Balance"
+                    value={currencyFormatter.format(invoiceDetailTarget.balance)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Plan" value={invoiceDetailTarget.plan.name} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Payments Recorded"
+                    value={String(invoiceDetailTarget.paymentCount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Latest Payment"
+                    value={
+                      invoiceDetailTarget.latestPaymentAt
+                        ? formatDateTime(invoiceDetailTarget.latestPaymentAt)
+                        : 'No payment yet'
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Created" value={formatDateTime(invoiceDetailTarget.createdAt)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Updated" value={formatDateTime(invoiceDetailTarget.updatedAt)} />
+                </Grid>
+              </Grid>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          {invoiceDetailTarget ? (
+            <Button
+              variant="outlined"
+              onClick={() => navigate(`/tenants/${invoiceDetailTarget.tenantId}`)}
+            >
+              Open Tenant
+            </Button>
+          ) : null}
+          <Button onClick={resetInvoiceDetailDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(paymentDetailTarget)}
+        onClose={resetPaymentDetailDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Payment Detail</DialogTitle>
+        <DialogContent>
+          {paymentDetailTarget ? (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Tenant" value={paymentDetailTarget.tenantName} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Tenant Status
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <StatusChip status={paymentDetailTarget.tenantStatus} />
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Amount"
+                    value={currencyFormatter.format(paymentDetailTarget.amount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Mode" value={paymentDetailTarget.modeOfPayment} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Transaction ID"
+                    value={paymentDetailTarget.transactionId ?? 'Manual payment'}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Primary Invoice"
+                    value={paymentDetailTarget.invoiceNumber ?? 'No linked invoice'}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Invoice Status
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      {paymentDetailTarget.invoiceStatus ? (
+                        <StatusChip status={paymentDetailTarget.invoiceStatus} />
+                      ) : (
+                        <Typography variant="body1" fontWeight={700}>
+                          No linked invoice
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Linked Invoices"
+                    value={
+                      paymentDetailTarget.linkedInvoiceNumbers.length
+                        ? paymentDetailTarget.linkedInvoiceNumbers.join(', ')
+                        : 'No invoice link'
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Linked Count"
+                    value={String(paymentDetailTarget.linkedInvoiceCount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Received"
+                    value={formatDateTime(paymentDetailTarget.createdAt)}
+                  />
+                </Grid>
+              </Grid>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          {paymentDetailTarget ? (
+            <Button
+              variant="outlined"
+              onClick={() => navigate(`/tenants/${paymentDetailTarget.tenantId}`)}
+            >
+              Open Tenant
+            </Button>
+          ) : null}
+          <Button onClick={resetPaymentDetailDialog}>Close</Button>
         </DialogActions>
       </Dialog>
     </Stack>
