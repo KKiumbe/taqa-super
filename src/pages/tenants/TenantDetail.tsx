@@ -251,14 +251,14 @@ const TenantDetail = () => {
           api.get<{ payments: PlatformPayment[] }>('/billing/payments', {
             params: {
               page: 1,
-              limit: 6,
+              limit: 3,
               tenantId: tenant.id,
             },
           }),
           api.get<{ receipts: PlatformReceipt[] }>('/receipts/tenant', {
             params: {
               tenantId: tenant.id,
-              limit: 6,
+              limit: 3,
             },
           }),
         ]);
@@ -1124,7 +1124,12 @@ const TenantDetail = () => {
               ) : invoicePreview.length ? (
                 <Stack spacing={1}>
                   {invoicePreview.map((invoice) => (
-                    <Paper variant="outlined" key={invoice.id} sx={{ p: 1.5 }}>
+                    <Paper
+                      variant="outlined"
+                      key={invoice.id}
+                      sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                      onClick={() => openInvoiceDetail(invoice)}
+                    >
                       <Stack spacing={0.5}>
                         <Stack direction="row" justifyContent="space-between">
                           <Typography fontWeight={700}>{invoice.invoiceNumber}</Typography>
@@ -1164,7 +1169,12 @@ const TenantDetail = () => {
               ) : paymentPreview.length ? (
                 <Stack spacing={1}>
                   {paymentPreview.map((payment) => (
-                    <Paper variant="outlined" key={payment.id} sx={{ p: 1.25 }}>
+                    <Paper
+                      variant="outlined"
+                      key={payment.id}
+                      sx={{ p: 1.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                      onClick={() => setPaymentDetailTarget(payment)}
+                    >
                       <Stack spacing={0.5}>
                         <Stack direction="row" justifyContent="space-between">
                           <Typography fontWeight={700}>
@@ -1200,12 +1210,19 @@ const TenantDetail = () => {
               <Typography variant="overline" color="primary">
                 Receipts
               </Typography>
-              {financeLoading && !receiptPreview.length ? (
+              {financeError ? (
+                <Typography color="error">{financeError}</Typography>
+              ) : financeLoading && !receiptPreview.length ? (
                 <Typography color="text.secondary">Loading receipts...</Typography>
               ) : receiptPreview.length ? (
                 <Stack spacing={1}>
                   {receiptPreview.map((receipt) => (
-                    <Paper key={receipt.id} variant="outlined" sx={{ p: 1.5 }}>
+                    <Paper
+                      key={receipt.id}
+                      variant="outlined"
+                      sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                      onClick={() => setReceiptDetailTarget(receipt)}
+                    >
                       <Stack spacing={0.5}>
                         <Typography fontWeight={700}>{receipt.receiptNumber}</Typography>
                         <Typography variant="body2" color="text.secondary">
@@ -1353,6 +1370,36 @@ const TenantDetail = () => {
           <Paper sx={{ p: 3, height: '100%' }}>
             <Stack spacing={2}>
               <Typography variant="overline" color="primary">
+                Counters
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <DetailMetric label="Users" value={String(tenant.counters.users)} />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric label="Customers" value={String(tenant.counters.customers)} />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Tenant Invoices"
+                    value={String(tenant.counters.tenantInvoices)}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <DetailMetric
+                    label="Tenant Payments"
+                    value={String(tenant.counters.tenantPayments)}
+                  />
+                </Grid>
+              </Grid>
+            </Stack>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Stack spacing={2}>
+              <Typography variant="overline" color="primary">
                 Recent Billing
               </Typography>
               <DetailMetric label="Open Invoices" value={String(openInvoices.length)} />
@@ -1391,220 +1438,41 @@ const TenantDetail = () => {
           <Paper sx={{ p: 3, height: '100%' }}>
             <Stack spacing={2}>
               <Typography variant="overline" color="primary">
-                Counters
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <DetailMetric label="Users" value={String(tenant.counters.users)} />
-                </Grid>
-                <Grid item xs={6}>
-                  <DetailMetric label="Customers" value={String(tenant.counters.customers)} />
-                </Grid>
-                <Grid item xs={6}>
-                  <DetailMetric
-                    label="Tenant Invoices"
-                    value={String(tenant.counters.tenantInvoices)}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <DetailMetric
-                    label="Tenant Payments"
-                    value={String(tenant.counters.tenantPayments)}
-                  />
-                </Grid>
-              </Grid>
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Stack spacing={2}>
-              <Typography variant="overline" color="primary">
-                Billing Queue
+                Send Bill via SMS
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Review current invoice exposure before creating new billings or applying manual
-                payments.
+                Send the tenant's outstanding bill to their phone number. The message is pre-filled
+                from the latest unpaid invoice and can be edited before sending.
               </Typography>
-              <Divider />
-              {billingLoading && !billingInvoices.length ? (
-                <Typography color="text.secondary">Loading billing records...</Typography>
-              ) : recentInvoices.length ? (
-                <Stack spacing={1.5}>
-                  {recentInvoices.map((invoice) => (
-                    <Paper key={invoice.id} variant="outlined" sx={{ p: 1.5 }}>
-                      <Stack spacing={0.5}>
-                        <Stack direction="row" justifyContent="space-between" spacing={1}>
-                          <Typography fontWeight={700}>{invoice.invoiceNumber}</Typography>
-                          <StatusChip status={invoice.status} />
-                        </Stack>
-                        <Typography variant="body2" color="text.secondary">
-                          {currencyFormatter.format(invoice.invoiceAmount)} invoiced
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Balance {currencyFormatter.format(invoice.balance)}
-                        </Typography>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography color="text.secondary">No platform billing records yet.</Typography>
-              )}
-              <Typography variant="body2" color="text.secondary">
-                Bill reminders go out daily and intensify three days before expiry. Any unpaid balance on
-                the 10th moves the tenant to `EXPIRED`.
-              </Typography>
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Stack spacing={2}>
-              <Typography variant="overline" color="primary">
-                Manual Invoice
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Create a tenant invoice with an auto-generated invoice number for the selected
-                month.
-              </Typography>
-              <TextField
-                label="Invoice Amount"
-                type="number"
-                inputProps={{ min: 1, step: '0.01' }}
-                value={invoiceAmountDraft}
-                onChange={(event) => setInvoiceAmountDraft(event.target.value)}
-                placeholder="0.00"
-              />
-              <TextField
-                label="Invoice Month"
-                type="month"
-                value={invoicePeriodDraft}
-                onChange={(event) => setInvoicePeriodDraft(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-              <Button variant="contained" onClick={createManualInvoice} disabled={creatingInvoice}>
-                {creatingInvoice ? 'Creating invoice...' : 'Create invoice'}
-              </Button>
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Stack spacing={2}>
-              <Typography variant="overline" color="primary">
-                Manual Payment
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Apply a manual payment to this tenant. If you pick an invoice, it is settled first
-                before any remaining amount rolls into other open invoices.
-              </Typography>
-              <FormControl fullWidth>
-                <InputLabel id="payment-invoice-label">Target Invoice</InputLabel>
-                <Select
-                  labelId="payment-invoice-label"
-                  label="Target Invoice"
-                  value={paymentInvoiceIdDraft}
-                  onChange={(event) => {
-                    const nextInvoiceId = event.target.value;
-                    setPaymentInvoiceIdDraft(nextInvoiceId);
-
-                    if (!paymentAmountDraft) {
-                      const nextInvoice = openInvoices.find((invoice) => invoice.id === nextInvoiceId);
-                      if (nextInvoice) {
-                        setPaymentAmountDraft(toAmountInput(nextInvoice.balance));
-                      }
-                    }
-                  }}
-                >
-                  <MenuItem value="">Auto allocate oldest open invoices</MenuItem>
-                  {openInvoices.map((invoice) => (
-                    <MenuItem key={invoice.id} value={invoice.id}>
-                      {invoice.invoiceNumber} · {currencyFormatter.format(invoice.balance)} due
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              {selectedInvoice ? (
+              <Box>
+                {openInvoices.length > 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Latest unpaid: <strong>{openInvoices[0].invoiceNumber}</strong> ·{' '}
+                    {currencyFormatter.format(openInvoices[0].balance)}
+                  </Typography>
+                ) : null}
                 <Typography variant="body2" color="text.secondary">
-                  Selected balance: {currencyFormatter.format(selectedInvoice.balance)}
+                  Recipient: {tenant.phoneNumber || tenant.alternativePhoneNumber || 'No phone on file'}
                 </Typography>
-              ) : null}
-              <TextField
-                label="Payment Amount"
-                type="number"
-                inputProps={{ min: 1, step: '0.01' }}
-                value={paymentAmountDraft}
-                onChange={(event) => setPaymentAmountDraft(event.target.value)}
-                placeholder="0.00"
-              />
-              <FormControl fullWidth>
-                <InputLabel id="payment-mode-label">Mode of Payment</InputLabel>
-                <Select
-                  labelId="payment-mode-label"
-                  label="Mode of Payment"
-                  value={paymentModeDraft}
-                  onChange={(event: SelectChangeEvent<ModeOfPayment>) =>
-                    setPaymentModeDraft(event.target.value as ModeOfPayment)
-                  }
+              </Box>
+              <Box>
+                <Button
+                  variant="contained"
+                  onClick={openSendBill}
+                  disabled={openInvoices.length === 0 || (!tenant.phoneNumber && !tenant.alternativePhoneNumber)}
                 >
-                  {paymentModes.map((mode) => (
-                    <MenuItem key={mode} value={mode}>
-                      {mode.replace('_', ' ')}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Reference"
-                value={paymentReferenceDraft}
-                onChange={(event) => setPaymentReferenceDraft(event.target.value)}
-                placeholder="Transaction code, bank ref, or receipt ref"
-              />
-              <TextField
-                label="Paid At"
-                type="datetime-local"
-                value={paidAtDraft}
-                onChange={(event) => setPaidAtDraft(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-              <Button variant="contained" onClick={recordManualPayment} disabled={recordingPayment}>
-                {recordingPayment ? 'Recording payment...' : 'Record payment'}
-              </Button>
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Stack spacing={2}>
-              <Typography variant="overline" color="primary">
-                SMS Top Up
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Credit SMS units to this tenant instantly using the platform SMS reseller profile.
-                Tenant admins also receive a system alert when the top-up lands.
-              </Typography>
-              <TextField
-                label="SMS Units"
-                type="number"
-                inputProps={{ min: 1, step: 1 }}
-                value={smsTopUpUnitsDraft}
-                onChange={(event) => setSmsTopUpUnitsDraft(event.target.value)}
-                placeholder="500"
-              />
-              <TextField
-                label="Reason"
-                value={smsTopUpReasonDraft}
-                onChange={(event) => setSmsTopUpReasonDraft(event.target.value)}
-                placeholder="Promotional credit, support recovery, manual adjustment"
-              />
-              <Button variant="contained" onClick={topUpTenantSms} disabled={toppingUpSms}>
-                {toppingUpSms ? 'Crediting SMS...' : 'Credit SMS units'}
-              </Button>
+                  Send Bill SMS
+                </Button>
+                {openInvoices.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    No outstanding invoices
+                  </Typography>
+                ) : !tenant.phoneNumber && !tenant.alternativePhoneNumber ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    No phone number on file
+                  </Typography>
+                ) : null}
+              </Box>
             </Stack>
           </Paper>
         </Grid>
@@ -1612,16 +1480,26 @@ const TenantDetail = () => {
         <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
-              <Box>
-                <Typography variant="overline" color="primary">
-                  Tenant Communication
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
-                  {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
-                  {platformSmsSender?.partnerId ?? '4680'}.
-                </Typography>
-              </Box>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                justifyContent="space-between"
+                alignItems={{ xs: 'flex-start', md: 'center' }}
+              >
+                <Box>
+                  <Typography variant="overline" color="primary">
+                    Tenant Communication
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
+                    {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
+                    {platformSmsSender?.partnerId ?? '4680'}.
+                  </Typography>
+                </Box>
+                <Button variant="outlined" onClick={impersonate} disabled={impersonating}>
+                  {impersonating ? 'Opening tenant app...' : 'Impersonate tenant'}
+                </Button>
+              </Stack>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={5}>
                   <TextField
@@ -1672,67 +1550,14 @@ const TenantDetail = () => {
             </Stack>
           </Paper>
         </Grid>
-
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between">
-              <Box>
-                <Typography variant="overline" color="primary">
-                  Support Notes
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Record support context here and launch a short-lived tenant impersonation session
-                  when needed.
-                </Typography>
-              </Box>
-              <Button variant="outlined" onClick={impersonate} disabled={impersonating}>
-                {impersonating ? 'Opening tenant app...' : 'Impersonate tenant'}
-              </Button>
-            </Stack>
-            <Divider sx={{ my: 2 }} />
-            <Stack spacing={2} sx={{ mb: 2.5 }}>
-              <TextField
-                multiline
-                minRows={3}
-                label="Add support note"
-                placeholder="Capture investigation details, next steps, or customer context."
-                value={noteDraft}
-                onChange={(event) => setNoteDraft(event.target.value)}
-              />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                <Button
-                  variant="contained"
-                  onClick={createNote}
-                  disabled={noteSaving || !noteDraft.trim()}
-                >
-                  {noteSaving ? 'Saving note...' : 'Save note'}
-                </Button>
-                <Typography variant="body2" color="text.secondary">
-                  Notes are stored under the platform namespace and visible only to platform admins.
-                </Typography>
-              </Stack>
-            </Stack>
-            <Stack spacing={2}>
-              {tenant.notes.length ? (
-                tenant.notes.map((note) => (
-                  <Paper key={note.id} variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="body1">{note.note}</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      {note.admin.name} · {formatDateTime(note.createdAt)}
-                    </Typography>
-                  </Paper>
-                ))
-              ) : (
-                <Typography color="text.secondary">
-                  No support notes have been recorded yet.
-                </Typography>
-              )}
-            </Stack>
-          </Paper>
-        </Grid>
       </Grid>
 
-      <Dialog open={deleteDialogOpen} onClose={() => !deletingTenant && setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deletingTenant && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Delete Tenant</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -1760,6 +1585,315 @@ const TenantDetail = () => {
             disabled={!deleteConfirmationMatches || deletingTenant}
           >
             {deletingTenant ? 'Deleting tenant...' : 'Delete tenant'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(invoiceDetailTarget)}
+        onClose={() => {
+          if (!adjusting && !cancelling) {
+            setInvoiceDetailTarget(null);
+            setCancelConfirming(false);
+          }
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Invoice {invoiceDetailTarget?.invoiceNumber}</DialogTitle>
+        <DialogContent>
+          {invoiceDetailTarget ? (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Invoice Number" value={invoiceDetailTarget.invoiceNumber} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <StatusChip status={invoiceDetailTarget.status} />
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Billing Period"
+                    value={formatDate(invoiceDetailTarget.invoicePeriod)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Invoice Amount"
+                    value={currencyFormatter.format(invoiceDetailTarget.invoiceAmount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Outstanding Balance"
+                    value={currencyFormatter.format(invoiceDetailTarget.balance)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Amount Paid"
+                    value={currencyFormatter.format(invoiceDetailTarget.amountPaid)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Plan" value={invoiceDetailTarget.plan.name} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Payments Recorded"
+                    value={String(invoiceDetailTarget.paymentCount)}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Latest Payment"
+                    value={
+                      invoiceDetailTarget.latestPaymentAt
+                        ? formatDateTime(invoiceDetailTarget.latestPaymentAt)
+                        : '-'
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Created" value={formatDateTime(invoiceDetailTarget.createdAt)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric
+                    label="Last Updated"
+                    value={formatDateTime(invoiceDetailTarget.updatedAt)}
+                  />
+                </Grid>
+              </Grid>
+
+              {(invoiceDetailTarget.status === 'UNPAID' || invoiceDetailTarget.status === 'PPAID') ? (
+                <>
+                  <Divider />
+                  <Stack spacing={1.5}>
+                    <Typography variant="overline" color="primary">
+                      Adjust Invoice
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Invoice Amount"
+                          type="number"
+                          inputProps={{ min: 1, step: '0.01' }}
+                          value={adjustAmountDraft}
+                          onChange={(event) => setAdjustAmountDraft(event.target.value)}
+                          disabled={adjusting || cancelling}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Invoice Month"
+                          type="month"
+                          value={adjustPeriodDraft}
+                          onChange={(event) => setAdjustPeriodDraft(event.target.value)}
+                          InputLabelProps={{ shrink: true }}
+                          disabled={adjusting || cancelling}
+                        />
+                      </Grid>
+                    </Grid>
+                    <Button
+                      variant="contained"
+                      onClick={adjustInvoice}
+                      disabled={adjusting || cancelling}
+                    >
+                      {adjusting ? 'Adjusting...' : 'Adjust Invoice'}
+                    </Button>
+                  </Stack>
+
+                  <Divider />
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    {cancelConfirming ? (
+                      <>
+                        <Button
+                          color="warning"
+                          variant="outlined"
+                          onClick={cancelInvoice}
+                          disabled={adjusting || cancelling}
+                        >
+                          {cancelling ? 'Cancelling...' : 'Confirm cancel?'}
+                        </Button>
+                        <Button
+                          variant="text"
+                          onClick={() => setCancelConfirming(false)}
+                          disabled={adjusting || cancelling}
+                        >
+                          No, go back
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        color="warning"
+                        variant="outlined"
+                        onClick={() => setCancelConfirming(true)}
+                        disabled={adjusting || cancelling}
+                      >
+                        Cancel Invoice
+                      </Button>
+                    )}
+                  </Stack>
+                </>
+              ) : null}
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setInvoiceDetailTarget(null);
+              setCancelConfirming(false);
+            }}
+            disabled={adjusting || cancelling}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(paymentDetailTarget)}
+        onClose={() => setPaymentDetailTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Payment Detail</DialogTitle>
+        <DialogContent>
+          {paymentDetailTarget ? (
+            <Grid container spacing={2} sx={{ pt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Amount"
+                  value={currencyFormatter.format(paymentDetailTarget.amount)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric label="Mode" value={paymentDetailTarget.modeOfPayment} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Transaction ID"
+                  value={paymentDetailTarget.transactionId ?? 'Manual payment'}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Linked Invoices"
+                  value={
+                    paymentDetailTarget.linkedInvoiceNumbers.length
+                      ? paymentDetailTarget.linkedInvoiceNumbers.join(', ')
+                      : '-'
+                  }
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric label="Paid At" value={formatDateTime(paymentDetailTarget.createdAt)} />
+              </Grid>
+            </Grid>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPaymentDetailTarget(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(receiptDetailTarget)}
+        onClose={() => setReceiptDetailTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Receipt {receiptDetailTarget?.receiptNumber}</DialogTitle>
+        <DialogContent>
+          {receiptDetailTarget ? (
+            <Grid container spacing={2} sx={{ pt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric label="Receipt Number" value={receiptDetailTarget.receiptNumber} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Amount"
+                  value={currencyFormatter.format(receiptDetailTarget.amount)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric label="Mode" value={receiptDetailTarget.modeOfPayment} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Transaction ID"
+                  value={receiptDetailTarget.transactionId ?? '-'}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="Billing Period"
+                  value={formatDate(receiptDetailTarget.billingPeriod)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DetailMetric
+                  label="SMS Status"
+                  value={
+                    receiptDetailTarget.smsSentAt
+                      ? `Sent ${formatDateTime(receiptDetailTarget.smsSentAt)}`
+                      : 'Pending'
+                  }
+                />
+              </Grid>
+            </Grid>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReceiptDetailTarget(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={sendBillOpen}
+        onClose={() => !sendingBill && setSendBillOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Send Bill via SMS</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Recipient"
+              value={sendBillRecipientDraft}
+              onChange={(event) => setSendBillRecipientDraft(event.target.value)}
+              disabled={sendingBill}
+              helperText="Tenant primary contact"
+            />
+            <TextField
+              fullWidth
+              multiline
+              minRows={4}
+              label="Message"
+              value={sendBillMessageDraft}
+              onChange={(event) => setSendBillMessageDraft(event.target.value)}
+              disabled={sendingBill}
+              helperText="Pre-filled from the latest unpaid invoice. Edit before sending."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSendBillOpen(false)} disabled={sendingBill}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={sendBillSms} disabled={sendingBill}>
+            {sendingBill ? 'Sending...' : 'Send Bill SMS'}
           </Button>
         </DialogActions>
       </Dialog>
