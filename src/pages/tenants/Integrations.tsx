@@ -10,10 +10,10 @@ import { PlatformSmsConfig } from '../../types';
 const interactionDefinitions = [
   {
     badge: 'SMS',
-    title: 'SMS Configuration',
-    description: 'Manage partner IDs, short codes, and support phones used by the tenant app.',
+    title: 'Tenant SMS Configuration',
+    description: 'Manage partner IDs, short codes, and support phones used by each tenant app.',
     action: {
-      label: 'Configure SMS',
+      label: 'Configure Tenant SMS',
       to: '/integrations/sms',
     },
   },
@@ -230,9 +230,10 @@ const Integrations = () => {
               <Typography variant="overline" color="text.secondary">
                 Platform SMS
               </Typography>
-              <Typography variant="h6">Billing Receipt Sender</Typography>
+              <Typography variant="h6">Super Admin SMS Sender</Typography>
               <Typography variant="body2" color="text.secondary">
-                Configure the singleton SMS profile used to send tenant subscription receipt notifications.
+                Configure the singleton SMS profile used when super-admin sends SMS to tenant admins,
+                billing reminders, and receipt notifications.
               </Typography>
             </Stack>
             {platformSmsError ? <Alert severity="error">{platformSmsError}</Alert> : null}
@@ -285,10 +286,16 @@ const Integrations = () => {
             </Grid>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">
-                {platformSmsConfig ? 'Singleton record is active. Use save to replace it via PUT.' : 'No platform SMS config exists yet. Saving will create the singleton row.'}
+                {platformSmsConfig
+                  ? 'The platform sender profile is active. Save replaces the singleton sender record via PUT.'
+                  : 'No platform sender profile exists yet. Saving creates the singleton sender record.'}
               </Typography>
               <Button variant="contained" onClick={savePlatformSmsConfig} disabled={platformSmsLoading || platformSmsSaving}>
-                {platformSmsSaving ? 'Saving...' : platformSmsConfig ? 'Update platform SMS' : 'Create platform SMS'}
+                {platformSmsSaving
+                  ? 'Saving...'
+                  : platformSmsConfig
+                    ? 'Update super-admin SMS'
+                    : 'Create super-admin SMS'}
               </Button>
             </Stack>
           </Stack>
@@ -307,7 +314,8 @@ const Integrations = () => {
             </Typography>
             <Divider flexItem />
             <Typography variant="body2">
-              Use the dedicated SMS and M-Pesa screens in the main navigation to configure or rotate credentials for each provider.
+              The platform SMS sender above is separate from tenant SMS credentials and powers the
+              super-admin communication tools.
             </Typography>
           </Stack>
         </CardContent>

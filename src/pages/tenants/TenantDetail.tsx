@@ -1491,7 +1491,8 @@ const TenantDetail = () => {
                     Tenant Communication
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
+                    Super-admin SMS uses the platform sender profile linked to tenant{' '}
+                    {platformSmsSender?.tenantId ?? 2}
                     {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
                     {platformSmsSender?.partnerId ?? '4680'}.
                   </Typography>

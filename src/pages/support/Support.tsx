@@ -665,16 +665,27 @@ const Support = () => {
 
       <Paper sx={{ p: 3 }}>
         <Stack spacing={2}>
-          <Box>
-            <Typography variant="overline" color="primary">
-              Tenant Communication
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Super-admin SMS uses the SMS config from tenant {platformSmsSender?.tenantId ?? 2}
-              {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
-              {platformSmsSender?.partnerId ?? '4680'}.
-            </Typography>
-          </Box>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', md: 'center' }}
+          >
+            <Box>
+              <Typography variant="overline" color="primary">
+                Tenant Communication
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Super-admin SMS uses the platform sender profile linked to tenant{' '}
+                {platformSmsSender?.tenantId ?? 2}
+                {platformSmsSender ? ` (${platformSmsSender.tenantName})` : ''} with partner ID{' '}
+                {platformSmsSender?.partnerId ?? '4680'}.
+              </Typography>
+            </Box>
+            <Button variant="outlined" onClick={() => navigate('/integrations')}>
+              Configure Sender
+            </Button>
+          </Stack>
           <Grid container spacing={2}>
             <Grid item xs={12} md={4}>
               <TextField
