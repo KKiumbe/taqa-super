@@ -26,7 +26,6 @@ import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import { api, TENANT_APP_URL } from '../../services/api';
 import {
-  ModeOfPayment,
   PlatformInvoice,
   PlatformPayment,
   PlatformReceipt,
@@ -35,25 +34,6 @@ import {
   TenantStatus,
 } from '../../types';
 import { currencyFormatter, formatDate, formatDateTime, formatRiskFlag } from '../../lib/format';
-
-const paymentModes: ModeOfPayment[] = [
-  'MPESA',
-  'BANK_TRANSFER',
-  'CASH',
-  'CREDIT_CARD',
-  'DEBIT_CARD',
-];
-
-const getCurrentMonthInput = (): string => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const getCurrentDateTimeInput = (): string => {
-  const now = new Date();
-  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return localTime.toISOString().slice(0, 16);
-};
 
 const toAmountInput = (value: number): string => {
   if (!Number.isFinite(value)) {
@@ -153,13 +133,6 @@ const TenantDetail = () => {
   const [tenantReceipts, setTenantReceipts] = useState<PlatformReceipt[]>([]);
   const [tenantStats, setTenantStats] = useState<TenantCustomerStats | null>(null);
   const [statusDraft, setStatusDraft] = useState<TenantStatus>('ACTIVE');
-  const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('');
-  const [invoicePeriodDraft, setInvoicePeriodDraft] = useState(getCurrentMonthInput());
-  const [paymentAmountDraft, setPaymentAmountDraft] = useState('');
-  const [paymentModeDraft, setPaymentModeDraft] = useState<ModeOfPayment>('MPESA');
-  const [paymentReferenceDraft, setPaymentReferenceDraft] = useState('');
-  const [paymentInvoiceIdDraft, setPaymentInvoiceIdDraft] = useState('');
-  const [paidAtDraft, setPaidAtDraft] = useState(getCurrentDateTimeInput());
   const [platformSmsSender, setPlatformSmsSender] = useState<PlatformSmsSenderProfile | null>(null);
   const [smsRecipientsDraft, setSmsRecipientsDraft] = useState('');
   const [smsMessageDraft, setSmsMessageDraft] = useState('');
@@ -167,14 +140,7 @@ const TenantDetail = () => {
   const [billingLoading, setBillingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detailsSaving, setDetailsSaving] = useState(false);
-  const [creatingInvoice, setCreatingInvoice] = useState(false);
-  const [recordingPayment, setRecordingPayment] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
-  const [toppingUpSms, setToppingUpSms] = useState(false);
-  const [smsTopUpUnitsDraft, setSmsTopUpUnitsDraft] = useState('');
-  const [smsTopUpReasonDraft, setSmsTopUpReasonDraft] = useState('Platform SMS top-up');
-  const [noteDraft, setNoteDraft] = useState('');
-  const [noteSaving, setNoteSaving] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmationDraft, setDeleteConfirmationDraft] = useState('');
@@ -222,9 +188,6 @@ const TenantDetail = () => {
         setBillingInvoices(invoicesResponse.data.invoices);
         setPlatformSmsSender(senderResponse.data.sender);
         setTenantStats(statsResponse.data.stats);
-        setInvoiceAmountDraft((current) =>
-          current || toAmountInput(tenantResponse.data.tenant.monthlyCharge)
-        );
         setSmsRecipientsDraft((current) =>
           current ||
           tenantResponse.data.tenant.phoneNumber ||
@@ -358,16 +321,9 @@ const TenantDetail = () => {
     [openInvoices]
   );
 
-  const recentInvoices = useMemo(() => billingInvoices.slice(0, 6), [billingInvoices]);
-
-  const selectedInvoice = useMemo(
-    () => openInvoices.find((invoice) => invoice.id === paymentInvoiceIdDraft) ?? null,
-    [openInvoices, paymentInvoiceIdDraft]
-  );
-
-  const invoicePreview = useMemo(() => recentInvoices.slice(0, 4), [recentInvoices]);
-  const paymentPreview = useMemo(() => tenantPayments.slice(0, 4), [tenantPayments]);
-  const receiptPreview = useMemo(() => tenantReceipts.slice(0, 4), [tenantReceipts]);
+  const invoicePreview = useMemo(() => billingInvoices.slice(0, 3), [billingInvoices]);
+  const paymentPreview = useMemo(() => tenantPayments.slice(0, 3), [tenantPayments]);
+  const receiptPreview = useMemo(() => tenantReceipts.slice(0, 3), [tenantReceipts]);
 
   const smsRecipientCount = useMemo(
     () =>
@@ -487,37 +443,6 @@ const TenantDetail = () => {
     }
   };
 
-  const topUpTenantSms = async () => {
-    if (!tenant) {
-      return;
-    }
-
-    const smsUnits = Number.parseInt(smsTopUpUnitsDraft, 10);
-    if (!Number.isInteger(smsUnits) || smsUnits < 1) {
-      setError('SMS top-up units must be a positive whole number.');
-      return;
-    }
-
-    setToppingUpSms(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await api.post(`/tenants/${tenant.id}/sms-topups`, {
-        smsUnits,
-        reason: smsTopUpReasonDraft.trim() || 'Platform SMS top-up',
-      });
-
-      setSmsTopUpUnitsDraft('');
-      setSmsTopUpReasonDraft('Platform SMS top-up');
-      setSuccess(`Credited ${smsUnits} SMS units to ${tenant.name}.`);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to top up SMS');
-    } finally {
-      setToppingUpSms(false);
-    }
-  };
-
   const deleteTenant = async () => {
     if (!tenant || !deleteConfirmationMatches) {
       setError(`Type "${tenant?.name ?? 'the tenant name'}" to confirm deletion.`);
@@ -563,132 +488,6 @@ const TenantDetail = () => {
       setError(err?.response?.data?.message ?? 'Failed to update tenant status');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const createManualInvoice = async () => {
-    if (!tenant) {
-      return;
-    }
-
-    const invoiceAmount = Number.parseFloat(invoiceAmountDraft);
-    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
-      setError('Enter a valid invoice amount greater than zero.');
-      return;
-    }
-
-    if (!invoicePeriodDraft) {
-      setError('Choose the invoice month before creating the invoice.');
-      return;
-    }
-
-    setCreatingInvoice(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await api.post<{ invoice: PlatformInvoice }>('/billing/invoices', {
-        tenantId: tenant.id,
-        invoiceAmount,
-        invoicePeriod: invoicePeriodDraft,
-      });
-
-      await refreshTenantWorkspace(tenant.id);
-      setPaymentInvoiceIdDraft(response.data.invoice.id);
-      setSuccess(`Created invoice ${response.data.invoice.invoiceNumber}.`);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to create tenant invoice');
-    } finally {
-      setCreatingInvoice(false);
-    }
-  };
-
-  const recordManualPayment = async () => {
-    if (!tenant) {
-      return;
-    }
-
-    const paymentAmount = Number.parseFloat(paymentAmountDraft);
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-      setError('Enter a valid payment amount greater than zero.');
-      return;
-    }
-
-    if (!paidAtDraft) {
-      setError('Choose the payment datetime before recording the payment.');
-      return;
-    }
-
-    setRecordingPayment(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await api.post<{
-        payment: PlatformPayment;
-        meta?: {
-          tenantReactivated?: boolean;
-        };
-      }>('/billing/payments', {
-        tenantId: tenant.id,
-        amount: paymentAmount,
-        modeOfPayment: paymentModeDraft,
-        transactionId: paymentReferenceDraft.trim() || undefined,
-        preferredInvoiceId: paymentInvoiceIdDraft || undefined,
-        paidAt: new Date(paidAtDraft).toISOString(),
-      });
-
-      await refreshTenantWorkspace(tenant.id);
-      setPaymentAmountDraft('');
-      setPaymentReferenceDraft('');
-      setPaymentInvoiceIdDraft('');
-      setPaidAtDraft(getCurrentDateTimeInput());
-
-      if (response.data.meta?.tenantReactivated) {
-        setSuccess(`Payment recorded and ${tenant.name} was reactivated.`);
-      } else {
-        const linkedInvoices = response.data.payment.linkedInvoiceNumbers.join(', ');
-        setSuccess(`Payment recorded against ${linkedInvoices}.`);
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to record tenant payment');
-    } finally {
-      setRecordingPayment(false);
-    }
-  };
-
-  const createNote = async () => {
-    if (!tenant || !noteDraft.trim()) {
-      setError('Enter a support note before saving.');
-      return;
-    }
-
-    setNoteSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await api.post<{
-        note: TenantDetailType['notes'][number];
-      }>('/support/tenant-notes', {
-        tenantId: tenant.id,
-        note: noteDraft.trim(),
-      });
-
-      setTenant((current) =>
-        current
-          ? {
-              ...current,
-              notes: [response.data.note, ...current.notes],
-            }
-          : current
-      );
-      setNoteDraft('');
-      setSuccess('Support note added.');
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to create support note');
-    } finally {
-      setNoteSaving(false);
     }
   };
 
