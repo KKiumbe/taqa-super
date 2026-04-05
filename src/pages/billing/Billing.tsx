@@ -38,6 +38,7 @@ import {
   PlatformReceipt,
   RevenueSummaryPayload,
   TenantSummary,
+  UnreceiptedPlatformPayment,
 } from '../../types';
 import { currencyFormatter, formatDate, formatDateTime } from '../../lib/format';
 
@@ -88,6 +89,15 @@ const Billing = () => {
   const [invoices, setInvoices] = useState<PlatformInvoice[]>([]);
   const [payments, setPayments] = useState<PlatformPayment[]>([]);
   const [receipts, setReceipts] = useState<PlatformReceipt[]>([]);
+  const [unreceiptedPlatformPayments, setUnreceiptedPlatformPayments] = useState<UnreceiptedPlatformPayment[]>([]);
+  const [unreceiptedPlatformPagination, setUnreceiptedPlatformPagination] = useState<PaginationMeta | null>(null);
+  const [unreceiptedPlatformPaginationModel, setUnreceiptedPlatformPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 10 });
+  const [receiptTarget, setReceiptTarget] = useState<UnreceiptedPlatformPayment | null>(null);
+  const [receiptingPayment, setReceiptingPayment] = useState(false);
+  const [receiptTenantId, setReceiptTenantId] = useState('');
+  const [receiptInvoiceId, setReceiptInvoiceId] = useState('');
+  const [receiptTenantInvoices, setReceiptTenantInvoices] = useState<PlatformInvoice[]>([]);
+  const [receiptTenantInvoicesLoading, setReceiptTenantInvoicesLoading] = useState(false);
   const [paymentTenantInvoices, setPaymentTenantInvoices] = useState<PlatformInvoice[]>([]);
   const [invoicePagination, setInvoicePagination] = useState<PaginationMeta | null>(null);
   const [paymentPagination, setPaymentPagination] = useState<PaginationMeta | null>(null);
@@ -145,7 +155,7 @@ const Billing = () => {
       setError(null);
 
       try {
-        const [summaryResponse, invoicesResponse, paymentsResponse, receiptsResponse] = await Promise.all([
+        const [summaryResponse, invoicesResponse, paymentsResponse, receiptsResponse, unreceiptedResponse] = await Promise.all([
           api.get<RevenueSummaryPayload>('/billing/revenue-summary'),
           api.get<{ invoices: PlatformInvoice[]; pagination: PaginationMeta }>('/billing/invoices', {
             params: {
@@ -168,6 +178,12 @@ const Billing = () => {
               limit: receiptPaginationModel.pageSize,
             },
           }),
+          api.get<{ payments: UnreceiptedPlatformPayment[]; pagination: PaginationMeta }>('/billing/platform-payments/unreceipted', {
+            params: {
+              page: unreceiptedPlatformPaginationModel.page + 1,
+              limit: unreceiptedPlatformPaginationModel.pageSize,
+            },
+          }),
         ]);
 
         if (cancelled) {
@@ -178,9 +194,11 @@ const Billing = () => {
         setInvoices(invoicesResponse.data.invoices);
         setPayments(paymentsResponse.data.payments);
         setReceipts(receiptsResponse.data.receipts);
+        setUnreceiptedPlatformPayments(unreceiptedResponse.data.payments);
         setInvoicePagination(invoicesResponse.data.pagination);
         setPaymentPagination(paymentsResponse.data.pagination);
         setReceiptPagination(receiptsResponse.data.pagination);
+        setUnreceiptedPlatformPagination(unreceiptedResponse.data.pagination);
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.response?.data?.message ?? 'Failed to load billing data');
@@ -204,6 +222,8 @@ const Billing = () => {
     paymentPaginationModel.pageSize,
     receiptPaginationModel.page,
     receiptPaginationModel.pageSize,
+    unreceiptedPlatformPaginationModel.page,
+    unreceiptedPlatformPaginationModel.pageSize,
     invoiceStatus,
     deferredInvoiceSearch,
     deferredPaymentSearch,
@@ -252,6 +272,39 @@ const Billing = () => {
       cancelled = true;
     };
   }, []);
+
+  // Load unpaid invoices for the receipt dialog tenant selection
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!receiptTarget || !receiptTenantId) {
+      setReceiptTenantInvoices([]);
+      setReceiptInvoiceId('');
+      return;
+    }
+
+    const load = async () => {
+      setReceiptTenantInvoicesLoading(true);
+      try {
+        const response = await api.get<{ invoices: PlatformInvoice[] }>('/billing/invoices', {
+          params: { tenantId: receiptTenantId, limit: 100 },
+        });
+        if (cancelled) return;
+        const unpaid = response.data.invoices.filter(
+          (inv) => inv.status === 'UNPAID' || inv.status === 'PPAID'
+        );
+        setReceiptTenantInvoices(unpaid);
+        setReceiptInvoiceId('');
+      } catch {
+        // ignore — tenant select is optional
+      } finally {
+        if (!cancelled) setReceiptTenantInvoicesLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [receiptTarget, receiptTenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -357,6 +410,50 @@ const Billing = () => {
 
   const resetPaymentDetailDialog = () => {
     setPaymentDetailTarget(null);
+  };
+
+  const openReceiptDialog = (payment: UnreceiptedPlatformPayment) => {
+    setReceiptTarget(payment);
+    setReceiptTenantId(String(tenants[0]?.id ?? ''));
+    setReceiptInvoiceId('');
+  };
+
+  const resetReceiptDialog = () => {
+    setReceiptTarget(null);
+    setReceiptTenantId('');
+    setReceiptInvoiceId('');
+    setReceiptTenantInvoices([]);
+  };
+
+  const submitReceiptPlatformPayment = async () => {
+    if (!receiptTarget) return;
+
+    if (!receiptTenantId || !Number.isInteger(Number(receiptTenantId))) {
+      setError('Select a tenant to receipt this payment against.');
+      return;
+    }
+
+    setReceiptingPayment(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await api.post<{ message: string; meta?: { tenantReactivated?: boolean } }>(
+        `/billing/platform-payments/${receiptTarget.id}/receipt`,
+        {
+          tenantId: Number(receiptTenantId),
+          preferredInvoiceId: receiptInvoiceId || undefined,
+        }
+      );
+
+      setRefreshKey((current) => current + 1);
+      setSuccess(response.data.message || 'Payment receipted successfully.');
+      resetReceiptDialog();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Failed to receipt platform payment');
+    } finally {
+      setReceiptingPayment(false);
+    }
   };
 
   const createManualInvoice = async () => {
@@ -845,6 +942,72 @@ const Billing = () => {
     [isCompact]
   );
 
+  const unreceiptedPlatformColumns = useMemo<GridColDef<UnreceiptedPlatformPayment>[]>(
+    () => [
+      {
+        field: 'transTime',
+        headerName: 'Date',
+        minWidth: 170,
+        valueFormatter: (value) => formatDateTime(value as string),
+      },
+      {
+        field: 'transactionId',
+        headerName: 'Transaction ID',
+        minWidth: 160,
+      },
+      {
+        field: 'amount',
+        headerName: 'Amount',
+        minWidth: 130,
+        valueFormatter: (value) => currencyFormatter.format(value as number),
+      },
+      {
+        field: 'phone',
+        headerName: 'Phone',
+        minWidth: 140,
+      },
+      {
+        field: 'ref',
+        headerName: 'Reference',
+        minWidth: 150,
+        valueFormatter: (value) => (value as string | null) ?? '—',
+      },
+      {
+        field: 'firstName',
+        headerName: 'Name',
+        minWidth: 130,
+        valueFormatter: (value) => (value as string | null) ?? '—',
+      },
+      {
+        field: 'shortCode',
+        headerName: 'Short Code',
+        minWidth: 120,
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        sortable: false,
+        filterable: false,
+        minWidth: 110,
+        renderCell: (params) => (
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            onClick={(event) => {
+              event.stopPropagation();
+              openReceiptDialog(params.row);
+            }}
+          >
+            Receipt
+          </Button>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tenants]
+  );
+
   return (
     <Stack spacing={3}>
       <PageHeader
@@ -1066,6 +1229,35 @@ const Billing = () => {
           />
         </Box>
       </Paper>
+
+      {(unreceiptedPlatformPayments.length > 0 || (unreceiptedPlatformPagination?.total ?? 0) > 0) ? (
+        <Paper sx={{ p: 2.5, border: '1px solid', borderColor: 'warning.main' }}>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="overline" color="warning.main">
+              Unreceipted Platform Payments
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              M-Pesa payments received on the platform shortcode that could not be automatically
+              matched to a tenant. Select a tenant and click <strong>Receipt</strong> to apply.
+            </Typography>
+          </Box>
+          <Box sx={{ height: 380 }}>
+            <DataGrid
+              rows={unreceiptedPlatformPayments}
+              columns={unreceiptedPlatformColumns}
+              loading={loading}
+              rowCount={unreceiptedPlatformPagination?.total ?? 0}
+              paginationMode="server"
+              paginationModel={unreceiptedPlatformPaginationModel}
+              onPaginationModelChange={setUnreceiptedPlatformPaginationModel}
+              pageSizeOptions={[10, 20, 50]}
+              disableRowSelectionOnClick
+              getRowHeight={() => 'auto'}
+              sx={platformDataGridSx}
+            />
+          </Box>
+        </Paper>
+      ) : null}
 
       <Paper sx={{ p: 2.5 }}>
         <Typography variant="overline" color="primary">
@@ -1555,6 +1747,87 @@ const Billing = () => {
             </Button>
           ) : null}
           <Button onClick={resetPaymentDetailDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Receipt Platform Payment Dialog */}
+      <Dialog
+        open={Boolean(receiptTarget)}
+        onClose={receiptingPayment ? undefined : resetReceiptDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Receipt Platform Payment</DialogTitle>
+        <DialogContent>
+          {receiptTarget ? (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Transaction ID" value={receiptTarget.transactionId} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Amount" value={currencyFormatter.format(receiptTarget.amount)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Phone" value={receiptTarget.phone} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Reference" value={receiptTarget.ref ?? '—'} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Received" value={formatDateTime(receiptTarget.transTime)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DetailMetric label="Short Code" value={receiptTarget.shortCode} />
+                </Grid>
+              </Grid>
+
+              <FormControl fullWidth disabled={tenantOptionsLoading || receiptingPayment}>
+                <InputLabel>Tenant *</InputLabel>
+                <Select
+                  label="Tenant *"
+                  value={receiptTenantId}
+                  onChange={(event: SelectChangeEvent) => setReceiptTenantId(event.target.value)}
+                >
+                  {tenants.map((tenant) => (
+                    <MenuItem key={tenant.id} value={String(tenant.id)}>
+                      {tenant.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {receiptTenantId ? (
+                <FormControl fullWidth disabled={receiptTenantInvoicesLoading || receiptingPayment}>
+                  <InputLabel>Apply to Invoice (optional)</InputLabel>
+                  <Select
+                    label="Apply to Invoice (optional)"
+                    value={receiptInvoiceId}
+                    onChange={(event: SelectChangeEvent) => setReceiptInvoiceId(event.target.value)}
+                  >
+                    <MenuItem value="">Auto-allocate to oldest unpaid</MenuItem>
+                    {receiptTenantInvoices.map((inv) => (
+                      <MenuItem key={inv.id} value={inv.id}>
+                        {inv.invoiceNumber} — {currencyFormatter.format(inv.invoiceAmount)} ({inv.status})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : null}
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetReceiptDialog} disabled={receiptingPayment}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={submitReceiptPlatformPayment}
+            disabled={!receiptTenantId || receiptingPayment}
+          >
+            {receiptingPayment ? 'Receipting…' : 'Receipt Payment'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Stack>

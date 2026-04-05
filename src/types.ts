@@ -237,6 +237,20 @@ export interface PlatformReceipt {
   createdAt: string;
 }
 
+export interface UnreceiptedPlatformPayment {
+  id: string;
+  transactionId: string;
+  shortCode: string;
+  amount: number;
+  phone: string;
+  firstName: string | null;
+  ref: string | null;
+  transTime: string;
+  receipted: boolean;
+  tenantId: number | null;
+  createdAt: string;
+}
+
 export interface PlatformSmsConfig {
   id: number;
   partnerId: string;
